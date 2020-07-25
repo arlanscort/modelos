@@ -1,2 +1,2 @@
 # modelos
-Repositório contendo os desenvolvimento de modelos hidrológicos
+Repositório contendo modelos hidrológicos e funções correlatas. 
