@@ -20,6 +20,9 @@ VarsEstado = {'S':S, 'R':R, 'HU1':HU1, 'HU2':HU2}
 DF = f_simula_GR4H(Parametros, Forcantes, VarsEstado, OrdHU1, OrdHU2)
 
 
+teste
+
+
 # import matplotlib.pyplot as plt
 
 
