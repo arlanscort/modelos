@@ -32,6 +32,7 @@ def f_gera_OrdHU1(x4, D=1.25):
     OrdHU1 = np.diff(SH1)
     return OrdHU1
 
+
 def f_gera_OrdHU2(x4, D=1.25):
     # D=2.5 para os modelos diarios
     # D=1.25 para os modelos horarios - ver Tese do Ficchi (2017) pg. 51
@@ -48,6 +49,7 @@ def f_gera_OrdHU2(x4, D=1.25):
             SH2[t] = 1
     OrdHU2 = np.diff(SH2)
     return OrdHU2
+
 
 def f_simula_GR4H(Parametros, Forcantes, VarsEstado, OrdHU1, OrdHU2):
 
@@ -104,7 +106,7 @@ def f_simula_GR4H(Parametros, Forcantes, VarsEstado, OrdHU1, OrdHU2):
         PRHU1 = PR*0.9
         PRHU2 = PR*0.1
 
-        # Convolucao dos Hidrograma Unitario 1
+        # Convolucao do Hidrograma Unitario 1
         for i in range(len(OrdHU1)-1):
             HU1[i] = HU1[i+1] + OrdHU1[i]*PRHU1
         HU1[-1] = OrdHU1[-1]*PRHU1
@@ -154,5 +156,82 @@ def f_simula_GR4H(Parametros, Forcantes, VarsEstado, OrdHU1, OrdHU2):
 
     return DF
 
-def f_calibra_GR4H(teste):
-    return teste+1
+
+def f_calibra_GR4H(Parametros, *args):
+    print('chamada!')
+    x1  = Parametros[0]
+    x2  = Parametros[1]
+    x3  = Parametros[2]
+    x4  = Parametros[3]
+    PME = args[0]
+    ETP = args[1]
+    Qobs = args[2]
+    Qsim = pd.Series(index=Qobs.index)
+    LWP = args[3]
+    S = 0.3*x1
+    R = 0.5*x3
+    OrdHU1 = f_gera_OrdHU1(x4)
+    OrdHU2 = f_gera_OrdHU2(x4)
+    HU1 = np.zeros(len(OrdHU1))
+    HU2 = np.zeros(len(OrdHU2))
+
+    for t, P1 in PME.iteritems():
+        E = ETP.loc[t]
+
+        # Interceptacao e balanco no reservatorio de SMA
+        if (P1-E) <= 0:
+            # esvaziamento
+            EN = E - P1
+            # !!! acelera calculo de PS !!!
+            TWS = 1 if EN/x1 > 13 else np.tanh(EN/x1)
+            ES  = S*(2 - S/x1)*TWS / (1 + (1 - S/x1)*TWS)
+            # !!! acelera calculo de PS !!!
+            S = S - ES
+            PR = 0 # (depois vai somar com PERC)
+        else:
+            # enchimento
+            PN = P1 - E
+            # !!! acelera o calculo de PS !!!
+            TWS = 1 if PN/x1 > 13 else np.tanh(PN/x1)
+            PS  = x1*(1 - (S/x1)**2)*TWS / (1 + S/x1*TWS)
+            # !!! acelera o calculo de PS !!!
+            S = S + PS
+            PR = PN - PS
+
+        # Percolacao
+        PERC = S*(1 - (1 + (S/(5.25*x1))**4)**(-0.25))
+        # (B = 5.25 para os modelos horarios, ver Tese do Ficchi (2017) pg. 266)
+        S = S - PERC
+
+        # Separacao da precipitacao efetiva
+        PR += PERC
+
+        # Convolucao dos Hidrogramas Unitarios
+        n = len(OrdHU1)-1
+        for i in range(len(OrdHU2)-1):
+            if i < n:
+                HU1[i] = HU1[i+1] + OrdHU1[i]*(PR*0.9)
+            HU2[i] = HU2[i+1] + OrdHU2[i]*(PR*0.1)
+        HU1[-1] = OrdHU1[-1]*(PR*0.9)
+        HU2[-1] = OrdHU2[-1]*(PR*0.1)
+
+        # Montante de que PODE ser transferido para o aquifero
+        EXCH = x2*(R/x3)**(7/2)
+
+        # Escoamento do reservatorio de propagacao
+        R = max(0, R + HU1[0] + EXCH)
+        QR = R*(1 - (1 + (R/x3)**4)**(-0.25))
+        R = R - QR
+
+        # Escoamento direto
+        QD = max(0, HU2[0] + EXCH)
+
+        # Escoamento total
+        Qsim.loc[t] = QR + QD
+
+        # NSE
+        num = np.sum((Qobs.to_numpy()[LWP:]-Qsim.to_numpy()[LWP:])**2)
+        den = np.sum((Qobs.to_numpy()[LWP:]-np.mean(Qobs))**2)
+        NSE = 1 - num/den
+
+    return Qsim, NSE

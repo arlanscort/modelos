@@ -4,39 +4,25 @@ import datetime as dt
 
 from modelo_gr4h import f_gera_OrdHU1, f_gera_OrdHU2
 from modelo_gr4h import f_simula_GR4H, f_calibra_GR4H
+from scipy.optimize import differential_evolution
 
 dados = pd.read_csv('L0123003.csv', parse_dates=True, index_col="DatesR")
 Forcantes = dados[['P','E','Qmm']].astype('float')
-Forcantes = Forcantes.rename(columns={'P':'pme', 'E':'etp', 'Qmm':'Qobs'})
+Forcantes = Forcantes.rename(columns={'P':'pme', 'E':'etp', 'Qmm':'qobs'})
 Forcantes.index.rename('datahora_utc', inplace=True)
-TESTE
 
 # Calibra
-#Parametros = {'x1':521.113, 'x2':-2.918, 'x3':218.009, 'x4':4.124}
-#S = 0.3*Parametros['x1']
-#R = 0.5*Parametros['x3']
-#VarsEstado = {'S':S, 'R':R, 'HU1':HU1, 'HU2':HU2}
-# OrdHU1 = f_gera_OrdHU1(Parametros['x4'])
-# OrdHU2 = f_gera_OrdHU2(Parametros['x4'])
-# HU1 = np.zeros(len(OrdHU1))
-# HU2 = np.zeros(len(OrdHU2))
+#X = [521.113, -2.918, 218.009, 4.124]
+#Qsim, NSE = f_calibra_GR4H(X, Forcantes.pme, Forcantes.etp, Forcantes.qobs, 1440)
 
 
-
-# Simula
-#DF = f_simula_GR4H(Parametros, Forcantes, VarsEstado, OrdHU1, OrdHU2)
-#DF.to_excel('dataset_obtido.xlsx')
-
-# import matplotlib.pyplot as plt
+# bounds = [(100,850), (-2.5,2.5), (100,600), (1,10)]
+# args = (Forcantes.pme, Forcantes.etp, Forcantes.qobs, 1440)
+#
+# resultado = differential_evolution(f_calibra_GR4H, bounds, args=args, disp=True)
 #
 #
-# t0 = dt.datetime(2004,3,1,1)
+# from scipy.optimize import rosen, differential_evolution
 #
-# Qobs = Forcantes.loc[t0:,'Qobs'].to_numpy()
-# Qobtido = DF.loc[t0:,'Qsim'].to_numpy()
-# Qesperado = pd.read_csv('Qsaidas.csv').to_numpy()
-#
-# plt.plot(Qobtido, label='obtido', color='red')
-# plt.plot(Qesperado, label='esperado', color='blue')
-#
-# plt.show()
+# bounds = [(0,2), (0, 2), (0, 2), (0, 2), (0, 2)]
+# result = differential_evolution(rosen, bounds, popsize=150, disp=True)
