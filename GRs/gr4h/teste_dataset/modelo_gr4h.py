@@ -53,6 +53,7 @@ def f_gera_OrdHU2(x4, D=1.25):
 
 def f_simula_GR4H(Parametros, Forcantes, VarsEstado, OrdHU1, OrdHU2):
 
+    print('chamada simulacao!')
     x1  = Parametros['x1']
     x2  = Parametros['x2']
     x3  = Parametros['x3']
@@ -68,7 +69,6 @@ def f_simula_GR4H(Parametros, Forcantes, VarsEstado, OrdHU1, OrdHU2):
     DF = pd.DataFrame()
 
     for t in PME.index:
-        print(t)
         P1 = PME.loc[t]
         E = ETP.loc[t]
 
@@ -157,17 +157,24 @@ def f_simula_GR4H(Parametros, Forcantes, VarsEstado, OrdHU1, OrdHU2):
     return DF
 
 
+def NSE(sr_qsim, sr_qobs, LWP):
+    num = np.sum((sr_qobs.to_numpy()[LWP:] - sr_qsim.to_numpy()[LWP:])**2)
+    den = np.sum((sr_qobs.to_numpy()[LWP:] - np.mean(sr_qobs))**2)
+    NSE = 1 - num/den
+    return NSE
+
+
 def f_calibra_GR4H(Parametros, *args):
-    print('chamada!')
+
     x1  = Parametros[0]
     x2  = Parametros[1]
     x3  = Parametros[2]
     x4  = Parametros[3]
-    PME = args[0]
-    ETP = args[1]
+    PME  = args[0]
+    ETP  = args[1]
     Qobs = args[2]
+    LWP  = args[3]
     Qsim = pd.Series(index=Qobs.index)
-    LWP = args[3]
     S = 0.3*x1
     R = 0.5*x3
     OrdHU1 = f_gera_OrdHU1(x4)
@@ -229,9 +236,10 @@ def f_calibra_GR4H(Parametros, *args):
         # Escoamento total
         Qsim.loc[t] = QR + QD
 
-        # NSE
-        num = np.sum((Qobs.to_numpy()[LWP:]-Qsim.to_numpy()[LWP:])**2)
-        den = np.sum((Qobs.to_numpy()[LWP:]-np.mean(Qobs))**2)
-        NSE = 1 - num/den
+    # NSE
+    num = np.sum((Qobs.to_numpy()[LWP:]-Qsim.to_numpy()[LWP:])**2)
+    den = np.sum((Qobs.to_numpy()[LWP:]-np.mean(Qobs))**2)
+    NSE = 1 - num/den
+    print(NSE)
 
-    return Qsim, NSE
+    return -NSE
