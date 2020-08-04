@@ -51,23 +51,34 @@ def f_gera_OrdHU2(x4, D=1.25):
     return OrdHU2
 
 
-def f_simula_detalhado(x1, x2, x3, x4, PME, ETP, S, R):
+def f_simula_detalhado(x1, x2, x3, x4, PME, ETP, S=None, R=None, HU1=None, HU2=None):
+    print("Executando GR4H em modo de simulacao detalhada...")
 
     # Calcula as ordenadas do HUs com base no parametro x4
     OrdHU1 = f_gera_OrdHU1(x4)
     OrdHU2 = f_gera_OrdHU2(x4)
-    HU1 = np.zeros(len(OrdHU1))
-    HU2 = np.zeros(len(OrdHU2))
 
-    # Inicializa o DataFrame que ira conter todas as saidas relevantes
-    DF = pd.DataFrame(columns = ['Pn','Ps','AE','Perc','PR','QD','QR', 'AExch',\
-                                    'Qrout','Qdrct','Qsim','Prod','Rout'])
+    # Atribui os estados iniciais, se nao foram passados
+    if S is None:
+        S = x1*0.3
+    if R is None:
+        R = x3*0.5
+    if HU1 is None:
+        HU1 = np.zeros(len(OrdHU1))
+    if HU2 is None:
+        HU2 = np.zeros(len(OrdHU2))
+
+    # Inicializa o DataFrame das saidas
+    HU1cols = ['EstHU1[{}]'.format(i) for i in range(len(OrdHU1))]
+    HU2cols = ['EstHU2[{}]'.format(i) for i in range(len(OrdHU2))]
+    cols = ['Pn','Ps','AE','Perc','PR','PExch', 'AExch1','AExch2', 'AExch', \
+            'QR','QD','Qsim','S','R'] + HU1cols + HU2cols
+    DF = pd.DataFrame(columns = cols)
 
     # Inicio do processo iterativo
     Forcantes = pd.concat([PME, ETP], axis=1)
     Forcantes.columns = ['Precip','PotEvap']
     for row in Forcantes.itertuples():
-        print('Processando {}'.format(row[0]))
         P1 = row[1]
         E  = row[2]
 
@@ -115,7 +126,7 @@ def f_simula_detalhado(x1, x2, x3, x4, PME, ETP, S, R):
             HU2[i] = HU2[i+1] + OrdHU2[i]*PRHU2
         HU2[-1] = OrdHU2[-1]*PRHU2
 
-        # Montante de que PODE ser transferido para o aquifero
+        # Montante que PODE ser transferido para o aquifero
         EXCH = x2*(R/x3)**(7/2)
 
         # Escoamento do reservatorio de propagacao
@@ -136,31 +147,40 @@ def f_simula_detalhado(x1, x2, x3, x4, PME, ETP, S, R):
             AEXCH2 = EXCH
 
         # Escoamento total
-        QT = QR + QD
+        Q = QR + QD
 
         # Insere as saidas em DF
         AEXCH = AEXCH1 + AEXCH2
 
-        DF = DF.append(pd.Series(index=DF.columns, data = [PN, PS, AE, PERC, \
-                        PR, QD, QR, AEXCH, QR, QD, QT, S, R], name=row[0]))
+        data = [PN, PS, AE, PERC, PR, EXCH, AEXCH1, AEXCH2, AEXCH, QR, QD, Q, S, R]
+        DF = DF.append(pd.Series(index=DF.columns, \
+                        data=data+HU1.tolist()+HU2.tolist(), name=row[0]))
 
     DF = pd.concat([Forcantes, DF], axis=1)
-    print('Fim!')
+    print('Simulacao concluida!')
     return DF
 
 
-def f_simula_rapido(x1, x2, x3, x4, PME, ETP, S, R):
+def f_simula_rapido(x1, x2, x3, x4, PME, ETP, S=None, R=None, HU1=None, HU2=None):
+    print("Executando GR4H em modo de simulacao rapida...")
 
     # Calcula as ordenadas do HUs com base no parametro x4
     OrdHU1 = f_gera_OrdHU1(x4)
     OrdHU2 = f_gera_OrdHU2(x4)
-    HU1 = np.zeros(len(OrdHU1))
-    HU2 = np.zeros(len(OrdHU2))
 
-    Qsim = pd.Series()
+    # Atribui os estados iniciais, se nao foram passados
+    if S is None:
+        S = x1*0.3
+    if R is None:
+        R = x3*0.5
+    if HU1 is None:
+        HU1 = np.zeros(len(OrdHU1))
+    if HU2 is None:
+        HU2 = np.zeros(len(OrdHU2))
+
+    Qsim = []
     Forcantes = pd.concat([PME, ETP], axis=1)
     for row in Forcantes.itertuples():
-        print(row[0])
         P1 = row[1]
         E  = row[2]
 
@@ -216,40 +236,43 @@ def f_simula_rapido(x1, x2, x3, x4, PME, ETP, S, R):
         QT = QR + QD
 
         # Consolida serie de saida
-        Qsim = Qsim.append(pd.Series(data=[QT], index=[row[0]]))
+        Qsim.append(QT)
 
+    Qsim = pd.Series(data=Qsim, index=Forcantes.index, name='Qsim_mm')
     return Qsim
-
-    # def NSE(sr_qsim, sr_qobs, LWP):
-    #     num = np.sum((sr_qobs.to_numpy()[LWP:] - sr_qsim.to_numpy()[LWP:])**2)
-    #     den = np.sum((sr_qobs.to_numpy()[LWP:] - np.mean(sr_qobs))**2)
-    #     NSE = 1 - num/den
-    #     return NSE
-    #
-    # return -NSE
-
 
 
 def f_calibra_NSE(X, *args):
+    print('Chamada de simulacao!')
+    # Argumentos
+    PME     = args[0]
+    ETP     = args[1]
+    Qobs    = args[2]
+    DFcal   = args[3]
+    S0_prop = args[4]
+    R0_prop = args[5]
 
-    x1  = Parametros[0]
-    x2  = Parametros[1]
-    x3  = Parametros[2]
-    x4  = Parametros[3]
-    PME  = args[0]
-    ETP  = args[1]
-    Qobs = args[2]
-    LWP  = args[3]
-    Qsim = pd.Series(index=Qobs.index)
-    S = 0.3*x1
-    R = 0.5*x3
+    # Parametros
+    x1 = X[0]
+    x2 = X[1]
+    x3 = X[2]
+    x4 = X[3]
+
+    # Estados Iniciais
+    S = x1*S0_prop
+    R = x3*R0_prop
     OrdHU1 = f_gera_OrdHU1(x4)
     OrdHU2 = f_gera_OrdHU2(x4)
     HU1 = np.zeros(len(OrdHU1))
     HU2 = np.zeros(len(OrdHU2))
 
-    for t, P1 in PME.iteritems():
-        E = ETP.loc[t]
+    # Simulacao
+    Qobs = Qobs.to_numpy()
+    Qsim = []
+    Forcantes = pd.concat([PME, ETP], axis=1)
+    for row in Forcantes.itertuples():
+        P1 = row[1]
+        E  = row[2]
 
         # Interceptacao e balanco no reservatorio de SMA
         if (P1-E) <= 0:
@@ -300,21 +323,17 @@ def f_calibra_NSE(X, *args):
         QD = max(0, HU2[0] + EXCH)
 
         # Escoamento total
-        Qsim.loc[t] = QR + QD
+        QT = QR + QD
 
-    # NSE
-    num = np.sum((Qobs.to_numpy()[LWP:]-Qsim.to_numpy()[LWP:])**2)
-    den = np.sum((Qobs.to_numpy()[LWP:]-np.mean(Qobs))**2)
+        # Consolida serie de saida
+        Qsim.append(QT)
+    Qsim = np.asarray(Qsim)
+
+    # Nash-Sutcliffe Efficiency
+    num = np.sum((Qobs[1440:]-Qsim[1440:])**2)
+    den = np.sum((Qobs[1440:]-np.mean(Qobs[1440:]))**2)
     NSE = 1 - num/den
-    print(NSE)
-
-    def NSE(sr_qsim, sr_qobs, LWP):
-        num = np.sum((sr_qobs.to_numpy()[LWP:] - sr_qsim.to_numpy()[LWP:])**2)
-        den = np.sum((sr_qobs.to_numpy()[LWP:] - np.mean(sr_qobs))**2)
-        NSE = 1 - num/den
-        return NSE
-
-    return -NSE
+    return 1-NSE
 
 
 # def f_calibra_KGE(X, *args):
