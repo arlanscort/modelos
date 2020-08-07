@@ -33,7 +33,7 @@ import pandas as pd
 #     return OrdHU1
 
 
-def sacsma_detalhado(DT, X, PME, ETP, St=None):
+def sacsma_detalhado(X, PME, ETP, St=None):
     print("Executando SAC-SMA em modo de simulacao detalhada...")
 
     UZTWM = X.get("UZTWM")
@@ -80,7 +80,7 @@ def sacsma_detalhado(DT, X, PME, ETP, St=None):
         # E5    - evapotranspiracao da area impearmeavel variavel (ADIMP)
         # RED   - demanda residual, que passa da UZ para a LZ
         EDMND = EP
-        ### DA ZONA SUPERIOR (UZ)
+        ### ZONA SUPERIOR (UZ)
         E1 = EDMND*(UZTWC/UZTWM)
         if UTZWC >= E1: # Todo E1 eh atendido pela agua de tensao da UZ
             # E1 = E1
@@ -109,7 +109,7 @@ def sacsma_detalhado(DT, X, PME, ETP, St=None):
                 E2 = UZFWC
                 UZFWC = 0
                 RED = RED - E2
-        ### DA ZONA INFERIOR (LZ)
+        ### ZONA INFERIOR (LZ)
         E3 = RED*LZTWC/(UZTWM + LZTWM)
         if LZTWC >= E3: # Todo E3 eh atendido pela agua de tensao da LZ
             # E3 = E3
@@ -131,7 +131,7 @@ def sacsma_detalhado(DT, X, PME, ETP, St=None):
                 DEL = DEL - LZFSC
                 LZFSC = 0
                 LZFPC = LZFPC - DEL
-        ### DA AREA ADIMP
+        ### AREA ADIMP
         E5 = E1 + (RED + E2)*((ADIMC - E1 - UZTWC) / (UZTWM + LZTWM)) # ???
         if ADIMC >= E5:
             E5 = E5*ADIMP
@@ -143,16 +143,43 @@ def sacsma_detalhado(DT, X, PME, ETP, St=None):
 ################################################################################
 # PERCOLACAO E ESCOAMENTO SUPERFICIAL
 ################################################################################
+        ### LAMINA NA ZONA SUPERIOR (TWX)
+        if PXV >= (UZTWM - UZTWC) # A lamina TWX vai infiltrar
+            TWX = PXV - (UZTWM - UZTWC)
+            UZTWC = UZTWM
+        else: # A lamina TWX fica toda retida no reservatorio UZTW
+            TWX = 0
+            UZTWC = UZTWC + PXV
+        ### LAMINA NA AREA ADIMP
+        ADIMC = ADIMC + PXV - TWX
+            # Minha interpretacao da linha acima:
+            # ADIMC eh uma altura pluviometrica que representa a area saturada
+            # da bacia, que eh variavel, limitada e proprocional a umidade rela-
+            # tiva dos reservatorios de tensao.
+            # Quando o UZTW esta na capacidade maxima, ou seja, UZTWC = UZTWM,
+            # presume-se que a area sataurada tb esteja em seu limite maximo.
+            # Considerando que ADIMC = ADIMC + (PXV - TWX), temos:
+            # - se o UZTW estava cheio, TWX = PXV e (PXV - TWX) eh minimo (=0),
+            # logo nao ocorre aumento de ADIMC;
+            # - se o UZTW estava vazio, TWX = 0 e (PXV-TWX) eh maximo (=PXV),
+            # logo toda a precipitacao vai contribuir para o aumento de ADIMC.
+        ### COMPUTA ESCOAMENTO DA AREA IMPERMEAVEL
+        ROIMP = PXV * PCTIM
+        # SIMPVT = SIMPVT + ROIMP (necessario?)
+        # INICIALIZANDO OS ESCOAMENTOS
+        SBF   = 0
+        SSUR  = 0
+        SIF   = 0
+        SPREC = 0
+        SDRO  = 0
+        SPBF  = 0
+
+        NINC  = 1 + 0.2*(UZFWC + TWX)
+        DTINC = 1/NINC
+        PINC  = TWX/NINC
 
 
 
 
-
-            # Essa parte vinha antes de ver se os reservatorios podiam atender ao
-            # DEL, mas seria que isso sempre vai acontecer?
-
-
-        # Arredondamento numerico
-        if LZTWC < 0.00001 : LZTWC = 0
 
 # def f_simula_rapido(Params, PME, ETP, Qmon=None, Estados=None):
