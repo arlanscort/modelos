@@ -72,15 +72,15 @@ def sacsma_detalhado(X, PME, ETP, St=None):
 ################################################################################
 # EVAPOTRANSPIRACAO
 ################################################################################
-        # EDMND - evapotranspiracao potencial
-        # E1    - evapotranspiracao real da Zona Superior (UZ) - (livre+tensao)
-        # E2    - evapotranspiracao real de agua livre da Zona Superior (UZ)
-        # E3    - evapotanspiracao real da Zona Inferior - (livre+tensao)
-        # E4
-        # E5    - evapotranspiracao da area impearmeavel variavel (ADIMP)
-        # RED   - demanda residual, que passa da UZ para a LZ
+    # EDMND - evapotranspiracao potencial
+    # E1    - evapotranspiracao real da Zona Superior (UZ) - (livre+tensao)
+    # E2    - evapotranspiracao real de agua livre da Zona Superior (UZ)
+    # E3    - evapotanspiracao real da Zona Inferior - (livre+tensao)
+    # E4
+    # E5    - evapotranspiracao da area impearmeavel variavel (ADIMP)
+    # RED   - demanda residual, que passa da UZ para a LZ
         EDMND = EP
-        ### ZONA SUPERIOR (UZ)
+        ### Zona Superior (UZ)
         E1 = EDMND*(UZTWC/UZTWM)
         if UTZWC >= E1: # Todo E1 eh atendido pela agua de tensao da UZ
             # E1 = E1
@@ -109,7 +109,7 @@ def sacsma_detalhado(X, PME, ETP, St=None):
                 E2 = UZFWC
                 UZFWC = 0
                 RED = RED - E2
-        ### ZONA INFERIOR (LZ)
+        ### Zona Inferior (LZ)
         E3 = RED*LZTWC/(UZTWM + LZTWM)
         if LZTWC >= E3: # Todo E3 eh atendido pela agua de tensao da LZ
             # E3 = E3
@@ -131,7 +131,7 @@ def sacsma_detalhado(X, PME, ETP, St=None):
                 DEL = DEL - LZFSC
                 LZFSC = 0
                 LZFPC = LZFPC - DEL
-        ### AREA ADIMP
+        ### Area ADIMP
         E5 = E1 + (RED + E2)*((ADIMC - E1 - UZTWC) / (UZTWM + LZTWM)) # ???
         if ADIMC >= E5:
             E5 = E5*ADIMP
@@ -143,14 +143,14 @@ def sacsma_detalhado(X, PME, ETP, St=None):
 ################################################################################
 # PERCOLACAO E ESCOAMENTO SUPERFICIAL
 ################################################################################
-        ### LAMINA NA ZONA SUPERIOR (TWX)
+        ### Lamina excedente da Zona Superior (TWX)
         if PXV >= (UZTWM - UZTWC) # A lamina TWX vai infiltrar
             TWX = PXV - (UZTWM - UZTWC)
             UZTWC = UZTWM
         else: # A lamina TWX fica toda retida no reservatorio UZTW
             TWX = 0
             UZTWC = UZTWC + PXV
-        ### LAMINA NA AREA ADIMP
+        ### Lamina incremental na area ADIMP
         ADIMC = ADIMC + PXV - TWX
             # Minha interpretacao da linha acima:
             # ADIMC eh uma altura pluviometrica que representa a area saturada
@@ -163,23 +163,51 @@ def sacsma_detalhado(X, PME, ETP, St=None):
             # logo nao ocorre aumento de ADIMC;
             # - se o UZTW estava vazio, TWX = 0 e (PXV-TWX) eh maximo (=PXV),
             # logo toda a precipitacao vai contribuir para o aumento de ADIMC.
-        ### COMPUTA ESCOAMENTO DA AREA IMPERMEAVEL
+        ### Escoamento gerado na area impermeavel
         ROIMP = PXV * PCTIM
-        # SIMPVT = SIMPVT + ROIMP (necessario?)
-        # INICIALIZANDO OS ESCOAMENTOS
-        SBF   = 0
-        SSUR  = 0
-        SIF   = 0
-        SPREC = 0
-        SDRO  = 0
-        SPBF  = 0
-
-        NINC  = 1 + 0.2*(UZFWC + TWX)
-        DTINC = 1/NINC
+        # SIMPVT = SIMPVT + ROIMP (??? necessario ???)
+########################################################################
+# LOOP INTERNO PARA "FURTHER SOIL-MOISTURE ACCOUNTG
+########################################################################
+    # NINC - Numero de incrementos/passos de tempo do loop interno
+    # DINC - Intervalo de tempo de cada passo
+    # PINC - Umidade incremental de cada passo (max 5mm, ver pasta anexos)
+    # DUZ  - Fracao de deplecionamento do reservatorio UZFW
+    # DLZP - Fracao de deplecionamento do reservatorio da LZ primario
+    # DLZS - Fracao de deplecionamento do reservatorio da LZ suplementar
+        ### Numero de incrementos computados no loop interno
+        NINC  = int(1 + 0.2*(UZFWC + TWX))
+        DINC  = 1/NINC # Omiti DT; tome cuidado para remover a dependencia de DT
         PINC  = TWX/NINC
+        ### Fracoes de deplecionamento
+        DUZ   = 1 - ((1-UZK)**DINC)
+        DLZP  = 1 - ((1-LZPK)**DINC)
+        DLZS  = 1 - ((1-LSSK)**DINC)
+            # Frac = (-1)*(S[t+dt]-S[t])/S[t] = 1-exp(1-k.dt)
+            # Servem para calcular as perdas dos reservatorios...
+            # (ver anexos para entender a logica!)
+            # Observacao: enquanto UZK, LZPK e LZSK estiverem com a mesma
+            # unidade do passo de tempo basico do modelo (hrˆ-1, diaˆ-1 ou ateh
+            # 6hrˆ-1), o modelo nao tera dependencia temporal, pois UZK*DINC,
+            # por exemplo, sera adimensional.
+        ### Inicalizacao dos acumuladores
+        SSUR  = 0 # Somatorio do escoamento superficial
+        SIF   = 0 # Somatorio do escoamento subsuperficial (interflow)
+        SPREC = 0 # Somatorio do montante de percolacao
+        SDRO  = 0 # Somatorio do escoamento superficial direto (direct runoff)
+        SBF   = 0 # Somatorio do escoamento de base (baseflow)
+        SPBF  = 0 # Somatorio do escoamento de base primario
+        ### Inicio do loop interno
+        for i in range(NINC):
+            ADSUR = 0 # ??? VAI USAR LA EMBAIXO
 
+            # Escoamento direto gerado na area ADIMP
+            RATIO = (ADIMC - UZTWC) / LZTWM
+            if RATIO < 0 : RATIO = 0
+            ADDRO = PINC*(RATIO**2)
+                # Soh quem fez o modelo pra entender as 3 linhas acima...
 
-
-
-
-# def f_simula_rapido(Params, PME, ETP, Qmon=None, Estados=None):
+            # Primeiro tira agua dos reservatorios inferiores
+            # Depois adiciona o montante percolado
+            BF = LZFPC * DLZP
+            if LZFPC >
