@@ -183,10 +183,10 @@ def sacsma_detalhado(X, PME, ETP, St=None):
         DUZ   = 1 - ((1-UZK)**DINC)
         DLZP  = 1 - ((1-LZPK)**DINC)
         DLZS  = 1 - ((1-LSSK)**DINC)
-            # Frac = (-1)*(S[t+dt]-S[t])/S[t] = 1-exp(1-k.dt)
+            # Frac = (-1)*(S[t+dt]-S[t])/S[t] = 1-exp(1-k.dt) ~= 1-(1-k)^dt
             # Servem para calcular as perdas dos reservatorios...
             # (ver anexos para entender a logica!)
-            # Observacao: enquanto UZK, LZPK e LZSK estiverem com a mesma
+            # Observacao: enquanto as taxas UZK, LZPK e LZSK e ZPERC estiverem com a mesma
             # unidade do passo de tempo basico do modelo (hrˆ-1, diaˆ-1 ou ateh
             # 6hrˆ-1), o modelo nao tera dependencia temporal, pois UZK*DINC,
             # por exemplo, sera adimensional.
@@ -197,8 +197,10 @@ def sacsma_detalhado(X, PME, ETP, St=None):
         SDRO  = 0 # Somatorio do escoamento superficial direto (direct runoff)
         SBF   = 0 # Somatorio do escoamento de base (baseflow)
         SPBF  = 0 # Somatorio do escoamento de base primario
+        SSBF  = 0 # Somatorio do escoamento de base suplementar
         ### Inicio do loop interno
         for i in range(NINC):
+
             ADSUR = 0 # ??? VAI USAR LA EMBAIXO
 
             # Escoamento direto gerado na area ADIMP
@@ -207,7 +209,56 @@ def sacsma_detalhado(X, PME, ETP, St=None):
             ADDRO = PINC*(RATIO**2)
                 # Soh quem fez o modelo pra entender as 3 linhas acima...
 
-            # Primeiro tira agua dos reservatorios inferiores
-            # Depois adiciona o montante percolado
-            BF = LZFPC * DLZP
-            if LZFPC >
+            # 1o. Retira a agua livre que escoa dos reservatorios inferiores
+            DEL = LZFPC * DLZP
+            if LZFPC > DEL:
+                # DEL = DEL
+                LZFPC = LZFPC - DEL
+            else:
+                DEL = LZFPC
+                LZFPC = 0
+            SBF  = SBF + DEL
+            SPBF = SPBF + DEL
+
+            DEL = LZFSC * DLZS
+            if LZFSC > DEL:
+                # DEL = DEL
+                LZFSC = LZFSC - DEL
+            else:
+                DEL = LZFSC
+                LZFSC = 0
+            SBF  = SBF + DEL
+            SSBF = SSBF + DEL
+
+            # 2o. Percolacao de agua livre (UZFW + PINC) para os rsvs inferiores
+            if (PINC + UZFWC) > 0.01: # Tem agua disponivel para percolar
+
+                # DEFR  - Deficit relativo de umidade da zona inferior
+                # PERCM - Limite inferior de percolacao na condicao de saturacao
+                #         dos reservatorios inferiores PBASE no livro
+                # ZPERC
+                #
+
+                ### ???
+
+
+                PERCM = LZFPM*DLZP + LZFSM*DLZS
+                PERM = PERCM*(UZFWC/UZFWM)
+                PERC = PERC*(1 + ZPERC*(DEFR**REXP))
+                DEFR = 1 - (LZTWC+LZFPC+LZFSC)/(LZTWM+LZFPM+LZFSM)
+
+
+
+
+
+
+
+
+
+
+
+            else: # Nao tem agua disponivel para percolar
+                UFZWC = UZFWC + PINC
+                ADSUR = 0 ### ???
+
+            PERCM =

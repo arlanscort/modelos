@@ -25,7 +25,7 @@ C.......................................
 C
 C     COMMON BLOCKS
       INCLUDE 'common/fprog'
-      
+
 c- xfan changed for pgf90 6/29/01   COMMON/fprog/MAINUM
       COMMON/FSMPM1/UZTWM,UZFWM,UZK,PCTIM,ADIMP,RIVA,ZPERC,REXP,LZTWM,
      1LZFSM,LZFPM,LZSK,LZPK,PFREE,SIDE,SAVED,PAREA
@@ -279,6 +279,10 @@ C     DIRECT RUNOFF.
 C
 C     ADIMP AREA WATER BALANCE -- SDRO IS THE 6 HR SUM OF
 C          DIRECT RUNOFF.
+
+
+    VEM PRA CA
+
   249 ADIMC=ADIMC+PINC-ADDRO-ADSUR
       IF (ADIMC.LE.(UZTWM+LZTWM)) GO TO 247
       ADDRO=ADDRO+ADIMC-(UZTWM+LZTWM)
@@ -378,4 +382,3 @@ C     ADD TO SUMS OF RUNOFF COMPONENTS.
 C.......................................
       RETURN
       END
-
