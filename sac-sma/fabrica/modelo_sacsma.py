@@ -193,7 +193,7 @@ def sacsma_detalhado(X, PME, ETP, St=None):
         ### Inicalizacao dos acumuladores
         SSUR  = 0 # Somatorio do escoamento superficial
         SIF   = 0 # Somatorio do escoamento subsuperficial (interflow)
-        SPREC = 0 # Somatorio do montante de percolacao
+        SPERC = 0 # Somatorio do montante de percolacao
         SDRO  = 0 # Somatorio do escoamento superficial direto (direct runoff)
         SBF   = 0 # Somatorio do escoamento de base (baseflow)
         SPBF  = 0 # Somatorio do escoamento de base primario
@@ -232,30 +232,56 @@ def sacsma_detalhado(X, PME, ETP, St=None):
 
             # 2o. Percolacao de agua livre (UZFW + PINC) para os rsvs inferiores
             if (PINC + UZFWC) > 0.01: # Tem agua disponivel para percolar
-
                 # DEFR  - Deficit relativo de umidade da zona inferior
-                # PERCM - Limite inferior de percolacao na condicao de saturacao
-                #         dos reservatorios inferiores PBASE no livro
-                # ZPERC
-                #
-
-                ### ???
-
-
+                # PERCM - Limite minimo de percolacao na condicao em que os rsvs
+                # DEFR  - Deficit relativo de umidade da zona inferior (DEWET)
+                # PERCT - Montante percolado que vai para o rsv de agua de tensao
+                # PERCF - Montante de percolacao que vai para os rsvs de agua livre
                 PERCM = LZFPM*DLZP + LZFSM*DLZS
-                PERM = PERCM*(UZFWC/UZFWM)
-                PERC = PERC*(1 + ZPERC*(DEFR**REXP))
-                DEFR = 1 - (LZTWC+LZFPC+LZFSC)/(LZTWM+LZFPM+LZFSM)
+                SLZ_DEF = LZTWM + LZFPM + LZFSM - LZTWC - LZFPC -LZFSC
+                DEFR  = SLZ_DEF/(LZTWM + LZFPM + LZFSM)
+                PERC  = PERCM*(1 + ZPERC*DEFR**REXP)*(UZFWC/UZFWM)
+
+                # A percolacao ocorre primeiramente a partir de UZFW
+                if PERC >= UZFWC:
+                    PERC = UZFWC
+                if PERC >= SLZ_DEF:
+                    PERC = SLZ_DEF
+                UZFWC = UZFWC - PERC
+                SPERC = SPERC - PERC
+                # Escoamento subsuperficial (interflow)
+                DEL = UZFWC * DUZ
+                UZFSC = UZFSC - DEL
+                SIF = SIF + DEL
+                # Distribuicao da agua percolada na zona inferior
+                # Primeiro de tensao
+                PERCT = PERC*(1-PFREE)
+                if (PERCT + LZTWC) > LZTWM:
+                    # Agua em excesso eh adicionada ao PERCF
+                    EXC = (PERCT + LZTWC) - LZTWM
+                    LZTWC = LZTWM
+                else:
+                    # Nao vai para agua livre
+                    EXC = 0
+                    LZTWC = LZTWC + PERCT
+                PERCF = PERC*PFREE + EXC
+                # Depois de agua livre
+                if PERCF > 0:
+                    HPL = LZFPM / (LZFPM + LZFSM)
+                    RATLP = LZFPC/LZFPM
+                    RATLS = LZFSC/LZFSM
+                    FRACP = min( 1, HPL*2*(1-RATLP)/((1-RATLP)+(1-RATLS)) )
+                    PERCP = PERCF*FRACP
+                    PERCS = PERCF - PERCP
+                if (LZFSC + PERCS) <= LZFSM:
+                    LZFSC = LZFSC + PERCS
+                    LZFPC = LZFPC + (PERCF - PERCS)
+                else:
+                    PERCS 
 
 
-
-
-
-
-
-
-
-
+                LZFSC = LZFSM
+                LZFPC = LZFPC + (PERCF - PERCS)
 
             else: # Nao tem agua disponivel para percolar
                 UFZWC = UZFWC + PINC

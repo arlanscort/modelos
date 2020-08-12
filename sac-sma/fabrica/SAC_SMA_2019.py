@@ -323,7 +323,7 @@ def SAC_SMA(etp, cmb, params, qin=None, states_ini=None, get_states=None):
                 PBASE  = LZFPM*DLZP + LZFSM*DLZS                        # Limite superior de percolacao (na condicao de saturacao do solo)
                 SLZ_DEF = (LZTWM-LZTWC) + (LZFSM-LZFSC) + (LZFPM-LZFPC) # Somatorio dos deficits dos reservatorios da zona inferior
                 SLZ_CAP = LZTWM + LZFSM + LZFPM                         # Somatorio das capacidades dos reservatorios da zona inferior
-                PERC = PBASE * (1.0 + ZPERC*(SLZ_DEF/SLZ_CAP)**REXP)      # Demanda por percolacao, considerando as deficiencias da zona inferior
+                PERC = PBASE * (1.0 + ZPERC*(SLZ_DEF/SLZ_CAP)**REXP)    # Demanda por percolacao, considerando as deficiencias da zona inferior
                 PERC = PERC * (UZFWC/UZFWM)                             # Demanda por percolacao, ponderada pela disponibilidade de agua livre na zona superior
                 if PERC >= UZFWC:  # A percolacao efetiva nao pode superar o montante de agua livre da zona superior
                     PERC = UZFWC
