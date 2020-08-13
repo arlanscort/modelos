@@ -10,25 +10,27 @@ import pandas as pd
 def sac_sma_detalhado(X, PME, ETP, Est=None):
     print("Executando SAC-SMA em modo de simulacao detalhada...")
 
-    # Parametros (X), sendo 13 obrigatorios + 3 opcionais
-    UZTWM = X.get("UZTWM")
-    UZFWM = X.get("UZFWM")
-    LZTWM = X.get("LZTWM")
-    LZFSM = X.get("LZFSM")
-    LZFPM = X.get("LZFPM")
-    UZK   = X.get("UZK")
-    LZSK  = X.get("LZSK")
-    LZPK  = X.get("LZPK")
-    PFREE = X.get("PFREE")
-    ZPERC = X.get("ZPERC")
-    REXP  = X.get("REXP")
-    PCTIM = X.get("PCTIM")
-    ADIMP = X.get("ADIMP")
+    ## X - parametros
+    # 13 obrigatorios
+    UZTWM = X.get("UZTWM") #
+    UZFWM = X.get("UZFWM") #
+    LZTWM = X.get("LZTWM") #
+    LZFSM = X.get("LZFSM") #
+    LZFPM = X.get("LZFPM") #
+    UZK   = X.get("UZK")   #
+    LZSK  = X.get("LZSK")  #
+    LZPK  = X.get("LZPK")  #
+    PFREE = X.get("PFREE") #
+    ZPERC = X.get("ZPERC") #
+    REXP  = X.get("REXP")  #
+    PCTIM = X.get("PCTIM") #
+    ADIMP = X.get("ADIMP") #
+    # 3 opcionais
     RIVA  = X.get("RIVA", 0.0)
     SIDE  = X.get("SIDE", 0.0)
     RSERV = X.get("RSERV", 0.3)
 
-    # Variaveis de estado (Est)
+    # Est - variaveis de estado
     if Est is None:
         UZTWC = UZTWM * 0.5
         UZFWC = UZFWM * 0.5
@@ -56,64 +58,59 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
     # UZFW - Reservatorio de agua livre da Zona Superior
     # LZTW - Reservatorio de agua de tensao da Zona Inferior
     # LZPW - Reservatorio primario de agua livre da Zona Inferior
-    # LZSW - Reservatorio suplementar de agua livre da Zona Inferior
-
-
-
-
-    # EDMND - evapotranspiracao potencial
-    # E1    - evapotranspiracao real da Zona Superior (UZ) - (livre+tensao)
-    # E2    - evapotranspiracao real de agua livre da Zona Superior (UZ)
-    # E3    - evapotanspiracao real da Zona Inferior - (livre+tensao)
-    # E4    -
-    # E5    - evapotranspiracao da area impearmeavel variavel (ADIMP)
-    # RED   - demanda residual, que passa da UZ para a LZ
-
         ########################################################################
-        ### EVAPOTRANSPIRACAO
-        # EDMND - Demanda global de agua por evapotranspiracao (ET)
-        # E1    - ETR de agua de tensao da Zona Superior (UZ)
-        # E2    - ETR de agua livre da Zona Superior (UZ)
-        # RED   - Demanda de agua por ET remanescente da UZ que vai para a LZ
-        # E3 -
+        # EVAPOTRANSPIRACAO
+        ########################################################################
+        # Existem algumas premissas relativas a evapotranspiracao:
+        #   1 - a evapotranspiracao potencial nos reservatorios de agua de
+        #   tensao eh proporcional a disponibilidade relativa de umidade nos
+        #   mesmos, o que nao ocorre nos reservatorios de agua livre;
+        #   2 - a evapotranspiracao consome prioritariamente agua de tensao,
+        #   consumindo agua livre somente de forma indireta, por meio das
+        #   demandas residuais ou de transferencia de agua livre para fins de
+        #   equilibrio dos armazenamentos);
+        #   3 - em decorrencia da 2a premissa, se houver consumo parcial do UZTW
+        #   a demanda restante vai para o LZTW, sem passar pelo UZFW.
+        # Significados das variaveis:
+        #   EP    - evapotranspiracao potencial global
+        #   EP1   - evapotranspiracao potencial no UZTW
+        #   E1    - evapotranspiracao real do UZTW
+        #   EP2   - evapotranspiracao potencial no UZFW (remanescente)
+        #   E2    - evapotranspiracao real do UZFW
+        #   RED   - evapotranspiracao potencial residual, passa p/ a LZ
+        #   UZRAT - disponibilidade relativa de agua da UZ, para o equilibrio
+        #   EP3   - evapotranspiracao potencial no LZTW
+        #   E3    - evapotranspiracao real do LZTW
+        #   SAVED
+        # RATLZT
+        # RATLZ
+        #
 
-        EDMND = EP
-        E1 = EDMND*(UZTWC/UZTWM)
-
-        if UTZWC >= E1:
-            RED = EDMND - E1
+        EP1 = EP*(UZTWC/UZTWM)
+        if UTZWC >= EPUZ:
+            E1 = EP1
             E2 = 0
         else:
             E1 = UTZWC
-            RED = EDMND - E1
-            if UZFWC >= RED: # Toda residual eh atendida pela agua livre
-                E2 = RED
-                UZFWC = UZFWC - E2
-                RED = 0
-                # Equilibra
-
-            elsez: # Seca a agua livre da UZ e o residual segue pra LZ
+            EP2 = EP - E1
+            if UZFWC >= EP2:
+                E2 = EP2
+            else:
                 E2 = UZFWC
-                UZFWC = 0
-                RED = RED - E2
-
-        UTZW = UTZWC - E1
-
-        if ((UZTWC/UZTWM) < (UZTWC/UZFWM)):
-            UZRAT = (UZTWC + UZFWC) / (UZTWM + UZFWM)
+        UZTWC = UTZWC - E1
+        UZFWC = UZFWC - E2
+        RED = EP - E1 - E2
+        if (UZTWC/UZTWM) < (UZFWC/UZFWM):
+            UZRAT = (UZTWC + UZFWC)/(UZTWM + UZFWM)
             UZTWC = UZTWM*UZRAT
             UZFWC = UZFWM*UZRAT
-
-        ### Zona Inferior (LZ)
-        E3 = RED*LZTWC/(UZTWM + LZTWM)
-        if LZTWC >= E3: # Todo E3 eh atendido pela agua de tensao da LZ
-            # E3 = E3
-            LZTWC = LZTWC - E3
-        else: # Seca a agua de tensao da LZ
+        EP3 = RED*(LZTWC/(UZTWM + LZTWM))
+        if LZTWC >= EP3:
+            E3 = EP3
+        else:
             E3 = LZWTC
-            LZWTC = 0
-        SAVED = RSERV*(LZFPM + LZFSM) # isso nao tinha o no original? Oo
-        # Transferencia de agua livre para o reservatorio de tensao da LZ
+        LZTWC = LZTWC - E3
+        SAVED = RSERV*(LZFPM + LZFSM)
         RATLZT = LZTWC / LZTWM
         RATLZ  = (LZTWC + LZFPC + LZFSC - SAVED)/(LZTWM + LZFPM + LZFSM - SAVED)
         if (RATLZT < RATLZ):
@@ -126,6 +123,7 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
                 DEL = DEL - LZFSC
                 LZFSC = 0
                 LZFPC = LZFPC - DEL
+
         ### Area ADIMP
         E5 = E1 + (RED + E2)*((ADIMC - E1 - UZTWC) / (UZTWM + LZTWM)) # ???
         if ADIMC >= E5:
