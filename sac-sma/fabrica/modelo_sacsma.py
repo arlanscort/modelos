@@ -1,47 +1,21 @@
-# '''
-# --------------------------------------------------------------------------------
-# Parametros
-#
-# Forcantes  - DataFrame
-# VarsEstado - dicionario contento np.array para os estados S e R
-#
-# P1 - altura de precipitacao do passo de tempo
-# E  - altura de evapotranspiracao potencial do passo de tempo
-# PN - precipitacao liquida
-# EN - evapotranspiracao potencial liquida
-# ES - montante que sai por evapotranspiracao do reservatorio de SMA
-# AE - evapotranspiracao real ('actual evapotranspiration')
-# --------------------------------------------------------------------------------
-# '''
+'''
+Implementacao: A. Scortegagna
+Data: agosto de 2020
+Verificacao:
+'''
 
 import numpy as np
 import pandas as pd
 
-# def f_gera_OrdHU1(x4, D=1.25):
-#     # D = 2.5 para os modelos diarios
-#     # D = 1.25 para os modelos horarios - ver Tese do Ficchi (2017) pg. 51
-#     n = int(np.ceil(x4))
-#     SH1 = np.zeros(n+1)
-#     for t in range(0, n+1):
-#         if (t<=0):
-#             SH1[t] = 0
-#         elif (t>0) & (t<x4):
-#             SH1[t] = (t/x4)**D
-#         else:
-#             SH1[t] = 1
-#     OrdHU1 = np.diff(SH1)
-#     return OrdHU1
-
-
-def sacsma_detalhado(X, PME, ETP, St=None):
+def sac_sma_detalhado(X, PME, ETP, Est=None):
     print("Executando SAC-SMA em modo de simulacao detalhada...")
 
+    # Parametros (X), sendo 13 obrigatorios + 3 opcionais
     UZTWM = X.get("UZTWM")
     UZFWM = X.get("UZFWM")
     LZTWM = X.get("LZTWM")
     LZFSM = X.get("LZFSM")
     LZFPM = X.get("LZFPM")
-    RSERV = X.get("RSERV", 0.3) # SAVED? em mm??
     UZK   = X.get("UZK")
     LZSK  = X.get("LZSK")
     LZPK  = X.get("LZPK")
@@ -52,8 +26,10 @@ def sacsma_detalhado(X, PME, ETP, St=None):
     ADIMP = X.get("ADIMP")
     RIVA  = X.get("RIVA", 0.0)
     SIDE  = X.get("SIDE", 0.0)
+    RSERV = X.get("RSERV", 0.3)
 
-    if St is None:
+    # Variaveis de estado (Est)
+    if Est is None:
         UZTWC = UZTWM * 0.5
         UZFWC = UZFWM * 0.5
         LZTWC = LZTWM * 0.5
@@ -61,54 +37,73 @@ def sacsma_detalhado(X, PME, ETP, St=None):
         LZFSC = LZFSM * 0.5
         ADIMC = UZTWC + LZTWC
     else:
-        UZTWC = St.get("UZTWM")
-        UZFWC = St.get("UZFWM")
-        LZTWC = St.get("LZTWM")
-        LZFPC = St.get("LZFPM")
-        LZFSC = St.get("LZFSM")
-        ADIMC = St.get("ADIMC")
+        UZTWC = Est.get("UZTWM")
+        UZFWC = Est.get("UZFWM")
+        LZTWC = Est.get("LZTWM")
+        LZFPC = Est.get("LZFPM")
+        LZFSC = Est.get("LZFSM")
+        ADIMC = Est.get("ADIMC")
 
+    ############################################################################
+    # INICIO DO LOOP EXTERNO
+    ############################################################################
     for PXV, EP in zip(PME, ETP):
-################################################################################
-# EVAPOTRANSPIRACAO
-################################################################################
+
+    # Siglas:
+    # UZ - Zona Superior (Upper Zone)
+    # LZ - Zona Inferior (Lower Zone)
+    # UTZW - Reservatorio de agua de tensao da Zona Superior
+    # UZFW - Reservatorio de agua livre da Zona Superior
+    # LZTW - Reservatorio de agua de tensao da Zona Inferior
+    # LZPW - Reservatorio primario de agua livre da Zona Inferior
+    # LZSW - Reservatorio suplementar de agua livre da Zona Inferior
+
+
+
+
     # EDMND - evapotranspiracao potencial
     # E1    - evapotranspiracao real da Zona Superior (UZ) - (livre+tensao)
     # E2    - evapotranspiracao real de agua livre da Zona Superior (UZ)
     # E3    - evapotanspiracao real da Zona Inferior - (livre+tensao)
-    # E4
+    # E4    -
     # E5    - evapotranspiracao da area impearmeavel variavel (ADIMP)
     # RED   - demanda residual, que passa da UZ para a LZ
+
+        ########################################################################
+        ### EVAPOTRANSPIRACAO
+        # EDMND - Demanda global de agua por evapotranspiracao (ET)
+        # E1    - ETR de agua de tensao da Zona Superior (UZ)
+        # E2    - ETR de agua livre da Zona Superior (UZ)
+        # RED   - Demanda de agua por ET remanescente da UZ que vai para a LZ
+        # E3 -
+
         EDMND = EP
-        ### Zona Superior (UZ)
         E1 = EDMND*(UZTWC/UZTWM)
-        if UTZWC >= E1: # Todo E1 eh atendido pela agua de tensao da UZ
-            # E1 = E1
-            UZTWC = UZWTC - E1
+
+        if UTZWC >= E1:
             RED = EDMND - E1
             E2 = 0
-            # Equilibra
-            if ((UZTWC/UZTWM) < (UZTWC/UZFWM)):
-                UZRAT = (UZTWC + UZFWC) / (UZTWM + UZFWM)
-                UZTWC = UZTWM*UZRAT
-                UZFWC = UZFWM*UZRAT
-        else: # Seca a agua de tensao da UZ e passa para agua livre da UZ
+        else:
             E1 = UTZWC
-            UZTWC = 0
             RED = EDMND - E1
             if UZFWC >= RED: # Toda residual eh atendida pela agua livre
                 E2 = RED
                 UZFWC = UZFWC - E2
                 RED = 0
                 # Equilibra
-                if ((UZTWC/UZTWM) < (UZTWC/UZFWM)):
-                    UZRAT = (UZTWC + UZFWC) / (UZTWM + UZFWM)
-                    UZTWC = UZTWM*UZRAT
-                    UZFWC = UZFWM*UZRAT
-            else: # Seca a agua livre da UZ e o residual segue pra LZ
+
+            elsez: # Seca a agua livre da UZ e o residual segue pra LZ
                 E2 = UZFWC
                 UZFWC = 0
                 RED = RED - E2
+
+        UTZW = UTZWC - E1
+
+        if ((UZTWC/UZTWM) < (UZTWC/UZFWM)):
+            UZRAT = (UZTWC + UZFWC) / (UZTWM + UZFWM)
+            UZTWC = UZTWM*UZRAT
+            UZFWC = UZFWM*UZRAT
+
         ### Zona Inferior (LZ)
         E3 = RED*LZTWC/(UZTWM + LZTWM)
         if LZTWC >= E3: # Todo E3 eh atendido pela agua de tensao da LZ
@@ -140,9 +135,9 @@ def sacsma_detalhado(X, PME, ETP, St=None):
             E5 = ADIMC
             ADIMC = 0
 
-################################################################################
-# PERCOLACAO E ESCOAMENTO SUPERFICIAL
-################################################################################
+        ################################################################################
+        # PERCOLACAO E ESCOAMENTO SUPERFICIAL
+        ###############################################################################
         ### Lamina excedente da Zona Superior (TWX)
         if PXV >= (UZTWM - UZTWC) # A lamina TWX vai infiltrar
             TWX = PXV - (UZTWM - UZTWC)
@@ -237,54 +232,103 @@ def sacsma_detalhado(X, PME, ETP, St=None):
                 # DEFR  - Deficit relativo de umidade da zona inferior (DEWET)
                 # PERCT - Montante percolado que vai para o rsv de agua de tensao
                 # PERCF - Montante de percolacao que vai para os rsvs de agua livre
-                PERCM = LZFPM*DLZP + LZFSM*DLZS
+                PERCM   = LZFPM*DLZP + LZFSM*DLZS
                 SLZ_DEF = LZTWM + LZFPM + LZFSM - LZTWC - LZFPC -LZFSC
-                DEFR  = SLZ_DEF/(LZTWM + LZFPM + LZFSM)
-                PERC  = PERCM*(1 + ZPERC*DEFR**REXP)*(UZFWC/UZFWM)
+                DEFR    = SLZ_DEF/(LZTWM + LZFPM + LZFSM)
+                PERC    = PERCM*(1 + ZPERC*(DEFR**REXP))*(UZFWC/UZFWM)
 
-                # A percolacao ocorre primeiramente a partir de UZFW
-                if PERC >= UZFWC:
+                # Primeiro retira-se a agua, depois adiciona-se TWX ??
+                if PERC > UZFWC:
                     PERC = UZFWC
-                if PERC >= SLZ_DEF:
+                if PERC > SLZ_DEF:
                     PERC = SLZ_DEF
                 UZFWC = UZFWC - PERC
                 SPERC = SPERC - PERC
+
                 # Escoamento subsuperficial (interflow)
                 DEL = UZFWC * DUZ
                 UZFSC = UZFSC - DEL
                 SIF = SIF + DEL
+
                 # Distribuicao da agua percolada na zona inferior
-                # Primeiro de tensao
-                PERCT = PERC*(1-PFREE)
+
+                # Primeiro de agua de tensao (PERCT)
+                PERCT = PERC*(1 - PFREE)
                 if (PERCT + LZTWC) > LZTWM:
                     # Agua em excesso eh adicionada ao PERCF
-                    EXC = (PERCT + LZTWC) - LZTWM
+                    PERCT_EXC = PERCT + LZTWC - LZTWM
                     LZTWC = LZTWM
                 else:
                     # Nao vai para agua livre
-                    EXC = 0
+                    PERCT_EXC = 0
                     LZTWC = LZTWC + PERCT
-                PERCF = PERC*PFREE + EXC
+
+
+                # Depois agua livre (PERCF)
+                PERCF = PERCT_EXC + PERC*PFREE
                 # Depois de agua livre
                 if PERCF > 0:
-                    HPL = LZFPM / (LZFPM + LZFSM)
+                    HPL   = LZFPM / (LZFPM + LZFSM)
                     RATLP = LZFPC/LZFPM
                     RATLS = LZFSC/LZFSM
-                    FRACP = min( 1, HPL*2*(1-RATLP)/((1-RATLP)+(1-RATLS)) )
+                    FRACP = min(1, HPL*2*(1-RATLP)/((1-RATLP)+(1-RATLS)))
+
                     PERCP = PERCF*FRACP
+
+                    # Primeiro coloca no suplementar (tentativo)
                     PERCS = PERCF - PERCP
-                if (LZFSC + PERCS) <= LZFSM:
-                    LZFSC = LZFSC + PERCS
+                    if (LZFSC + PERCS) <= LZFSM:
+                        # PERCS = PERCS
+                        LZFSC = LZFSC + PERCS
+                    else:
+                        PERCS = LZFSM - LZFSC
+                        LZFSC = LZFSM
+
                     LZFPC = LZFPC + (PERCF - PERCS)
-                else:
-                    PERCS 
+                    if (LZFPC > LZFPM):
+                        EXCESS = LZFPC - LZFPM
+                        LZTWC = LZTWC + EXCESS
+                        LZFPC = LZFPM
 
+                # Adiciona PINC no UZFWC E NO RSV SUPERFICIAL
+                if PINC > 0:
 
-                LZFSC = LZFSM
-                LZFPC = LZFPC + (PERCF - PERCS)
+                    if (PINC + UZFWC) > UZFWM:
+                        # Parte que nao eh do escoamento direto
+                        SUR = (PINC + UZFWC) - UZFWM
+                        UZFWC = UZFWM
+                        SSUR = SSUR + SUR*PAREA
+                        # Do escoament direto
+                        ADSUR = SUR*(1 - ADDRO/PINC)
+                        SSUR = SSUR + ADSUR*ADIMP
 
-            else: # Nao tem agua disponivel para percolar
-                UFZWC = UZFWC + PINC
-                ADSUR = 0 ### ???
+                    else:
+                        UZFWC = UZFWC + PINC
 
-            PERCM =
+            ADIMC = ADIMC + PINC - ADDRO - ADSUR
+            if ADIMC > UZTWM + LZTWM:
+                ADDRO = ADDRO + ADIMC - (UZTWM + LZTWM)
+                ADIMC = UZTWM + LZTWM
+            SDOR = SDOR + ADDRO*ADIMP
+            if ADIMC < 0.00001 : ADIMC = 0
+    ############################################################################
+    # FIM DO LOOP EXTERNO
+    ############################################################################
+
+    TBF = SBR*PAREA
+    BFCC = TBF*(1/(1+SIDE))
+    BFP = SPBF*PAREA/(1+SIDE)
+    BFS = BFCC - BFP
+    BFNCC = TBF - BFCC
+
+    TCI = ROIMP + SDRO + SSUR + SIF + BFCC
+
+    EUSED = E1 + E2 + E3
+    E4 = (EDMND - EUSED)*RIVA
+
+    TCI = TCI - E4
+    if (TCI < 0):
+        E4 = E4 + TCI
+        TCI = 0
+
+    SROT = SROT + TCI
