@@ -58,6 +58,8 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
     # UZFW - Reservatorio de agua livre da Zona Superior
     # LZTW - Reservatorio de agua de tensao da Zona Inferior
     # LZPW - Reservatorio primario de agua livre da Zona Inferior
+    # LZSW - Reservatorio suplementar de agua livre da Zona Inferior
+
         ########################################################################
         # EVAPOTRANSPIRACAO
         ########################################################################
@@ -72,20 +74,18 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
         #   3 - em decorrencia da 2a premissa, se houver consumo parcial do UZTW
         #   a demanda restante vai para o LZTW, sem passar pelo UZFW.
         # Significados das variaveis:
-        #   EP    - evapotranspiracao potencial global
-        #   EP1   - evapotranspiracao potencial no UZTW
-        #   E1    - evapotranspiracao real do UZTW
-        #   EP2   - evapotranspiracao potencial no UZFW (remanescente)
-        #   E2    - evapotranspiracao real do UZFW
-        #   RED   - evapotranspiracao potencial residual, passa p/ a LZ
-        #   UZRAT - disponibilidade relativa de agua da UZ, para o equilibrio
-        #   EP3   - evapotranspiracao potencial no LZTW
-        #   E3    - evapotranspiracao real do LZTW
-        #   SAVED
-        # RATLZT
-        # RATLZ
-        #
-
+        #   EP     - evapotranspiracao potencial global
+        #   EP1    - evapotranspiracao potencial no UZTW
+        #   E1     - evapotranspiracao real do UZTW
+        #   EP2    - evapotranspiracao potencial no UZFW (remanescente)
+        #   E2     - evapotranspiracao real do UZFW
+        #   RED    - evapotranspiracao potencial residual, passa p/ a LZ
+        #   UZRAT  - disponibilidade relativa de agua da UZ, para o equilibrio
+        #   EP3    - evapotranspiracao potencial no LZTW
+        #   E3     - evapotranspiracao real do LZTW
+        #   SAVED  - agua livre reservada, nao sujeita a evapotranspiracao
+        #   RATLZT - Relacao conteudo/capacidade de agua de tensao na LZ
+        #   RATLZ  - Relacao conteudo/capacidade de umidade total na LZ
         EP1 = EP*(UZTWC/UZTWM)
         if UTZWC >= EPUZ:
             E1 = EP1
@@ -99,6 +99,8 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
                 E2 = UZFWC
         UZTWC = UTZWC - E1
         UZFWC = UZFWC - E2
+        if UZTWC <= 0.00001 : UZTWC = 0
+        if UZFWC <= 0.00001 : UZFWC = 0
         RED = EP - E1 - E2
         if (UZTWC/UZTWM) < (UZFWC/UZFWM):
             UZRAT = (UZTWC + UZFWC)/(UZTWM + UZFWM)
@@ -110,72 +112,92 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
         else:
             E3 = LZWTC
         LZTWC = LZTWC - E3
+        if LZTWC <= 0.00001 : LZTWC = 0
         SAVED = RSERV*(LZFPM + LZFSM)
         RATLZT = LZTWC / LZTWM
         RATLZ  = (LZTWC + LZFPC + LZFSC - SAVED)/(LZTWM + LZFPM + LZFSM - SAVED)
         if (RATLZT < RATLZ):
             DEL = (RATLZ - RATLZT)*LZTWM
-            LZTWC = LZTWC + DEL
-            # Demonstrei que DEL<(LZFSC+LZFPC), portanto os rsvs sempre suprem
-            if LZFSC >= DEL: # Tenta primeiro suprir DEL com agua do suplementar
+            LZTWC = LZTWC + DEL # DEL < LZFSC+LZFPC, sempre (ver anexos)
+            if LZFSC >= DEL:
                 LZFSC = LZFSC - DEL
-            else: # Se nao der, seca o suplementar e supre com agua do primario
+            else:
                 DEL = DEL - LZFSC
                 LZFSC = 0
                 LZFPC = LZFPC - DEL
-
-        ### Area ADIMP
-        E5 = E1 + (RED + E2)*((ADIMC - E1 - UZTWC) / (UZTWM + LZTWM)) # ???
+        EP5 = E1 + (RED + E2)*((ADIMC - E1 - UZTWC)/(UZTWM + LZTWM)) # ???
         if ADIMC >= E5:
-            E5 = E5*ADIMP
             ADIMC = ADIMC - E5
+            E5 = E5*ADIMP
         else:
             E5 = ADIMC
             ADIMC = 0
 
         ################################################################################
-        # PERCOLACAO E ESCOAMENTO SUPERFICIAL
+        # PERCOLACAO
         ###############################################################################
-        ### Lamina excedente da Zona Superior (TWX)
-        if PXV >= (UZTWM - UZTWC) # A lamina TWX vai infiltrar
+        # A percolacao eh a passagem de agua livre da UZ para a LZ
+        # Primeiramente, calcula-se a altura pluviometrica superavitaria da UZ,
+        # ou seja, a quantidade de precipitacao que supera o deficit de agua de
+        # tensao e que eh passivel de percolar, juntamente com a agua do UZFW.
+        # Significados das variaveis:
+        #   PXV - altura pluviometrica global
+        #   TWX - altura pluviometrica superavitaria
+        if PXV >= (UZTWM - UZTWC)
             TWX = PXV - (UZTWM - UZTWC)
             UZTWC = UZTWM
-        else: # A lamina TWX fica toda retida no reservatorio UZTW
+        else:
             TWX = 0
             UZTWC = UZTWC + PXV
-        ### Lamina incremental na area ADIMP
+
+        ########################################################################
+        # AREA IMPERMEAVEL ADICIONAL
+        ########################################################################
+        # ADIMC eh uma altura pluviometrica que representa a area saturada
+        # da bacia. Essa area eh variavel, limitada e proprocional a umidade
+        # relativa dos UZTW, ou seja, quanto mais saturado estiver de agua de
+        # tensao, maior eh essa area impermeavel adicional.
+        # Quando o UZTW esta na capacidade maxima, ou seja, UZTWC = UZTWM,
+        # presume-se que a area sataurada tb esteja em seu limite maximo.
+        # Considerando que ADIMC = ADIMC + (PXV - TWX), temos:
+        #   - se o UZTW ja estava cheio, UZTWC = UZTWM acima, TWX = PXV e
+        #   PXV - TWX = 0 (max), logo nao ocorre aumento de ADIMC
+        #   - se o UZTW estava vazio, UZTWC = 0, TWX = 0 e PXV - TWX =PXV (max),
+        #   logo toda a precipitacao vai contribuir para o aumento de ADIMC.
         ADIMC = ADIMC + PXV - TWX
-            # Minha interpretacao da linha acima:
-            # ADIMC eh uma altura pluviometrica que representa a area saturada
-            # da bacia, que eh variavel, limitada e proprocional a umidade rela-
-            # tiva dos reservatorios de tensao.
-            # Quando o UZTW esta na capacidade maxima, ou seja, UZTWC = UZTWM,
-            # presume-se que a area sataurada tb esteja em seu limite maximo.
-            # Considerando que ADIMC = ADIMC + (PXV - TWX), temos:
-            # - se o UZTW estava cheio, TWX = PXV e (PXV - TWX) eh minimo (=0),
-            # logo nao ocorre aumento de ADIMC;
-            # - se o UZTW estava vazio, TWX = 0 e (PXV-TWX) eh maximo (=PXV),
-            # logo toda a precipitacao vai contribuir para o aumento de ADIMC.
-        ### Escoamento gerado na area impermeavel
+
+        ########################################################################
+        # ESCOAMENTO GERADO NA AREA IMPERMEAVEL
+        ########################################################################
         ROIMP = PXV * PCTIM
-        # SIMPVT = SIMPVT + ROIMP (??? necessario ???)
-########################################################################
-# LOOP INTERNO PARA "FURTHER SOIL-MOISTURE ACCOUNTG
-########################################################################
-    # NINC - Numero de incrementos/passos de tempo do loop interno
-    # DINC - Intervalo de tempo de cada passo
-    # PINC - Umidade incremental de cada passo (max 5mm, ver pasta anexos)
-    # DUZ  - Fracao de deplecionamento do reservatorio UZFW
-    # DLZP - Fracao de deplecionamento do reservatorio da LZ primario
-    # DLZS - Fracao de deplecionamento do reservatorio da LZ suplementar
+        SIMPVT = SIMPVT + ROIMP # ???
+
+        # Acumuladoes do loop interno
+        SSUR  = 0 # Escoamento superficial
+        SIF   = 0 # Escoamento subsuperficial (interflow)
+        SPERC = 0 # Percolacao
+        SDRO  = 0 # Escoamento superficial direto (direct runoff)
+        SBF   = 0 # Escoamento de base (baseflow - primario + suplementar)
+        SPBF  = 0 # Escoamento de base primario
+
+        # Parametros do loop interno
+        NINC = int(1 + 0.2*(UZFWC + TWX))
+        DINC = 1/NINC
+        PINC = TWX/NINC
+        DUZ  = 1 - ((1-UZK)**DINC)
+        DLZP = 1 - ((1-LZPK)**DINC)
+        DLZS = 1 - ((1-LSSK)**DINC)
+        # Observacao - o DINC nao considera o passo de tempo, uma vez que presu-
+        # m
+
+        # NINC - Numero de incrementos/passos de tempo do loop interno
+        # DINC - Intervalo de tempo de cada passo
+        # PINC - Umidade incremental de cada passo (max 5mm, ver pasta anexos)
+        # DUZ  - Fracao de deplecionamento do reservatorio UZFW
+        # DLZP - Fracao de deplecionamento do reservatorio da LZ primario
+        # DLZS - Fracao de deplecionamento do reservatorio da LZ suplementar
         ### Numero de incrementos computados no loop interno
-        NINC  = int(1 + 0.2*(UZFWC + TWX))
-        DINC  = 1/NINC # Omiti DT; tome cuidado para remover a dependencia de DT
-        PINC  = TWX/NINC
-        ### Fracoes de deplecionamento
-        DUZ   = 1 - ((1-UZK)**DINC)
-        DLZP  = 1 - ((1-LZPK)**DINC)
-        DLZS  = 1 - ((1-LSSK)**DINC)
+
             # Frac = (-1)*(S[t+dt]-S[t])/S[t] = 1-exp(1-k.dt) ~= 1-(1-k)^dt
             # Servem para calcular as perdas dos reservatorios...
             # (ver anexos para entender a logica!)
@@ -183,15 +205,11 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
             # unidade do passo de tempo basico do modelo (hrˆ-1, diaˆ-1 ou ateh
             # 6hrˆ-1), o modelo nao tera dependencia temporal, pois UZK*DINC,
             # por exemplo, sera adimensional.
-        ### Inicalizacao dos acumuladores
-        SSUR  = 0 # Somatorio do escoamento superficial
-        SIF   = 0 # Somatorio do escoamento subsuperficial (interflow)
-        SPERC = 0 # Somatorio do montante de percolacao
-        SDRO  = 0 # Somatorio do escoamento superficial direto (direct runoff)
-        SBF   = 0 # Somatorio do escoamento de base (baseflow)
-        SPBF  = 0 # Somatorio do escoamento de base primario
-        SSBF  = 0 # Somatorio do escoamento de base suplementar
-        ### Inicio do loop interno
+
+
+        ########################################################################
+        # INICIO DO LOOP INTERNO
+        ########################################################################
         for i in range(NINC):
 
             ADSUR = 0 # ??? VAI USAR LA EMBAIXO
@@ -309,6 +327,10 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
                 ADIMC = UZTWM + LZTWM
             SDOR = SDOR + ADDRO*ADIMP
             if ADIMC < 0.00001 : ADIMC = 0
+        ########################################################################
+        # FIM DO LOOP INTERNO
+        ########################################################################
+
     ############################################################################
     # FIM DO LOOP EXTERNO
     ############################################################################
