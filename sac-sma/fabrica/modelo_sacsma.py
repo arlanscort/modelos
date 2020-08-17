@@ -1,7 +1,6 @@
 '''
-Implementacao: A. Scortegagna
-Data: agosto de 2020
-Verificacao:
+Implementacao: Arlan Scortegagna, agosto de 2020
+Revisao:
 '''
 
 import numpy as np
@@ -46,6 +45,10 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
         LZFSC = Est.get("LZFSM")
         ADIMC = Est.get("ADIMC")
 
+    # AREA PEARMEAVEL PERMANENTE (PAREA)
+    # O Sac-SMA considera 3 areas: uma sempre permeavel (PAREA); outra sempre
+    # impermeavel (PCTIM); e outra permeavel variavel limitada a ADIMP.
+    PAREA = 1 - ADIMP - PCTIM
     ############################################################################
     # INICIO DO LOOP EXTERNO
     ############################################################################
@@ -60,9 +63,7 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
     # LZPW - Reservatorio primario de agua livre da Zona Inferior
     # LZSW - Reservatorio suplementar de agua livre da Zona Inferior
 
-        ########################################################################
         # EVAPOTRANSPIRACAO
-        ########################################################################
         # Existem algumas premissas relativas a evapotranspiracao:
         #   1 - a evapotranspiracao potencial nos reservatorios de agua de
         #   tensao eh proporcional a disponibilidade relativa de umidade nos
@@ -133,13 +134,11 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
             E5 = ADIMC
             ADIMC = 0
 
-        ################################################################################
-        # PERCOLACAO
-        ###############################################################################
-        # A percolacao eh a passagem de agua livre da UZ para a LZ
+        # PERCOLACAO (a)
+        # A percolacao representa a transferencia de agua livre do UZFW p/ a LZ.
         # Primeiramente, calcula-se a altura pluviometrica superavitaria da UZ,
         # ou seja, a quantidade de precipitacao que supera o deficit de agua de
-        # tensao e que eh passivel de percolar, juntamente com a agua do UZFW.
+        # tensao e que eh passivel de percolar junto com a agua livre do UZFW.
         # Significados das variaveis:
         #   PXV - altura pluviometrica global
         #   TWX - altura pluviometrica superavitaria
@@ -150,9 +149,7 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
             TWX = 0
             UZTWC = UZTWC + PXV
 
-        ########################################################################
         # AREA IMPERMEAVEL ADICIONAL
-        ########################################################################
         # ADIMC eh uma altura pluviometrica que representa a area saturada
         # da bacia. Essa area eh variavel, limitada e proprocional a umidade
         # relativa dos UZTW, ou seja, quanto mais saturado estiver de agua de
@@ -160,167 +157,168 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
         # Quando o UZTW esta na capacidade maxima, ou seja, UZTWC = UZTWM,
         # presume-se que a area sataurada tb esteja em seu limite maximo.
         # Considerando que ADIMC = ADIMC + (PXV - TWX), temos:
-        #   - se o UZTW ja estava cheio, UZTWC = UZTWM acima, TWX = PXV e
-        #   PXV - TWX = 0 (max), logo nao ocorre aumento de ADIMC
-        #   - se o UZTW estava vazio, UZTWC = 0, TWX = 0 e PXV - TWX =PXV (max),
-        #   logo toda a precipitacao vai contribuir para o aumento de ADIMC.
+        #   1 - se o UZTW ja estava cheio, UZTWC = UZTWM acima, TWX = PXV e
+        #   PXV - TWX = 0 (max), logo nao ocorre aumento de ADIMC;
+        #   2 - se o UZTW estava vazio, UZTWC = 0, TWX = 0 e PXV - TWX = PXV
+        # (max), logo toda a precipitacao vai incrementar ADIMC.
         ADIMC = ADIMC + PXV - TWX
 
-        ########################################################################
-        # ESCOAMENTO GERADO NA AREA IMPERMEAVEL
-        ########################################################################
+        # AREA IMPERMEAVEL PERMANENTE
         ROIMP = PXV * PCTIM
         SIMPVT = SIMPVT + ROIMP # ???
 
-        # Acumuladoes do loop interno
-        SSUR  = 0 # Escoamento superficial
-        SIF   = 0 # Escoamento subsuperficial (interflow)
-        SPERC = 0 # Percolacao
-        SDRO  = 0 # Escoamento superficial direto (direct runoff)
-        SBF   = 0 # Escoamento de base (baseflow - primario + suplementar)
-        SPBF  = 0 # Escoamento de base primario
-
-        # Parametros do loop interno
-        NINC = int(1 + 0.2*(UZFWC + TWX))
-        DINC = 1/NINC
-        PINC = TWX/NINC
-        DUZ  = 1 - ((1-UZK)**DINC)
-        DLZP = 1 - ((1-LZPK)**DINC)
-        DLZS = 1 - ((1-LSSK)**DINC)
-        # Observacao - o DINC nao considera o passo de tempo, uma vez que presu-
-        # m
-
-        # NINC - Numero de incrementos/passos de tempo do loop interno
-        # DINC - Intervalo de tempo de cada passo
-        # PINC - Umidade incremental de cada passo (max 5mm, ver pasta anexos)
-        # DUZ  - Fracao de deplecionamento do reservatorio UZFW
-        # DLZP - Fracao de deplecionamento do reservatorio da LZ primario
-        # DLZS - Fracao de deplecionamento do reservatorio da LZ suplementar
-        ### Numero de incrementos computados no loop interno
-
-            # Frac = (-1)*(S[t+dt]-S[t])/S[t] = 1-exp(1-k.dt) ~= 1-(1-k)^dt
-            # Servem para calcular as perdas dos reservatorios...
-            # (ver anexos para entender a logica!)
-            # Observacao: enquanto as taxas UZK, LZPK e LZSK e ZPERC estiverem com a mesma
-            # unidade do passo de tempo basico do modelo (hrˆ-1, diaˆ-1 ou ateh
-            # 6hrˆ-1), o modelo nao tera dependencia temporal, pois UZK*DINC,
-            # por exemplo, sera adimensional.
-
+        # Variaveis do loop interno
+        SSUR  = 0 # Somatorio do escoamento superficial
+        SIF   = 0 # Somatorio do escoamento subsuperficial (interflow)
+        SPERC = 0 # Somatorio da percolacao
+        SDRO  = 0 # Somatorio do escoamento superficial direto (direct runoff)
+        SPBF  = 0 # Somatorio do escoamento de base primario
+        SSBF  = 0 # Somatorio do escoamento de base suplementar
+        NINC = int(1 + 0.2*(UZFWC + TWX)) # Numero de incrementos/iteracoes
+        DINC = 1/NINC                     # Duracao dos incrementos
+        PINC = TWX/NINC                   # Altura incremental
+        DUZ  = 1 - ((1-UZK)**DINC)  # Fracao de deplecionamento do UZFW
+        DLZP = 1 - ((1-LZPK)**DINC) # Fracao de deplecionamento do LZFP
+        DLZS = 1 - ((1-LSSK)**DINC) # Fracao de deplecionamento do LZFS
+        # Observacoes:
+        #   1 - Em DINC foi omitido o passo de tempo do modelo (DT), assim,
+        #   cada incremento tem a mesma unidade de tempo do passo basico do
+        #   loop externo (1hr, 6hrs, 1dia, etc.);
+        #   2 - PINC maximo = 5 mm (ver anexos).
+        #   3 - As fracoes de deplecionamento servem para calcular as retiradas
+        #   dos reservatorios a cada incremento e equivalem a
+        #   (-1)*(S[t+dt]-S[t])/S[t] = 1-exp(1-k*dt) ~= 1-(1-k)^dt (ver anexos).
+        #   4 - IMPORTANTE: enquanto os parametros de recessao (UZK, LZPK e
+        #   LZSK estiverem na mesma unidade de tempo do loop externo (hrs, dia,
+        #   etc.), o modelo nao tera dependencia temporal, uma vez que
+        #   UZK*DINC, por exemplo, sera adimensional na exponencial.
 
         ########################################################################
         # INICIO DO LOOP INTERNO
         ########################################################################
         for i in range(NINC):
 
-            ADSUR = 0 # ??? VAI USAR LA EMBAIXO
+            ADSUR = 0 # Escoamento superficial gerado na area ADIMP (0 a priori)
 
-            # Escoamento direto gerado na area ADIMP
+            # ESCOAMENTO DIRETO DA AREA ADIMP
             RATIO = (ADIMC - UZTWC) / LZTWM
             if RATIO < 0 : RATIO = 0
-            ADDRO = PINC*(RATIO**2)
-                # Soh quem fez o modelo pra entender as 3 linhas acima...
+            ADDRO = PINC*(RATIO**2) # ???
 
-            # 1o. Retira a agua livre que escoa dos reservatorios inferiores
-            DEL = LZFPC * DLZP
-            if LZFPC > DEL:
-                # DEL = DEL
-                LZFPC = LZFPC - DEL
-            else:
-                DEL = LZFPC
-                LZFPC = 0
-            SBF  = SBF + DEL
-            SPBF = SPBF + DEL
+            # PERCOLACAO (b)
+            # Retira agua livre do LZFP e LZFS, liberando volume desses reserva-
+            # torios para receber a percolacao.
+            # Significado das variaveis:
+            #   DEL_PBF - agua livre que escoa do rsv primario
+            #   DEL_SBF - agua livre que escoa do rsv suplementar
+            DEL_PBF = LZFPC * DLZP
+            if LZFPC < DEL_PBF:
+                DEL_PBF = LZFPC
+            DEL_SBF = LZFSC * DLZS
+            if LZFSC < DEL_SBF:
+                DEL_SBF = LZFSC
+            LZFPC = LZFPC - DEL_PBF
+            if LZFPC < 0.0001 : LZFPC = 0
+            LZFSC = LZFSC - DEL_SBF
+            if LZFSC < 0.0001 : LZFSC = 0
+            SPBF = SPBF + DEL_PBF
+            SSBF = SSBF + DEL_SBF
 
-            DEL = LZFSC * DLZS
-            if LZFSC > DEL:
-                # DEL = DEL
-                LZFSC = LZFSC - DEL
-            else:
-                DEL = LZFSC
-                LZFSC = 0
-            SBF  = SBF + DEL
-            SSBF = SSBF + DEL
 
-            # 2o. Percolacao de agua livre (UZFW + PINC) para os rsvs inferiores
-            if (PINC + UZFWC) > 0.01: # Tem agua disponivel para percolar
-                # DEFR  - Deficit relativo de umidade da zona inferior
-                # PERCM - Limite minimo de percolacao na condicao em que os rsvs
-                # DEFR  - Deficit relativo de umidade da zona inferior (DEWET)
-                # PERCT - Montante percolado que vai para o rsv de agua de tensao
-                # PERCF - Montante de percolacao que vai para os rsvs de agua livre
-                PERCM   = LZFPM*DLZP + LZFSM*DLZS
-                SLZ_DEF = LZTWM + LZFPM + LZFSM - LZTWC - LZFPC -LZFSC
-                DEFR    = SLZ_DEF/(LZTWM + LZFPM + LZFSM)
-                PERC    = PERCM*(1 + ZPERC*(DEFR**REXP))*(UZFWC/UZFWM)
+            if (PINC + UZFWC) > 0.01:
+                # HA agua livre disponivel na UZ; a percolacao eh efetivada
 
-                # Primeiro retira-se a agua, depois adiciona-se TWX ??
+                # PERCOLACAO (c)
+                # Transfere agua livre da UZ para a LZ, antes de adicionar o
+                # PINC no UZFW.
+                # Significado das variaveis:
+                #   PERCM - Limite min de percolacao com rsvs da LZ saturados
+                #   DEFR  - Deficit relativo combinado de umidade da LZ
+                #   PERC  - Volume de percolacao potencial
+                #   DEFA  - Deficit absoluto combinado de umidade da LZ
+                # Observacao: no livro do Singh, PERCM = PBASE e DEFR = DEWET
+                PERCM = LZFPM*DLZP + LZFSM*DLZS
+                DEFR  = 1 - (LZTWC + LZFPC + LZFSC)/(LZTWM + LZFPM + LZFSM)
+                PERC  = PERCM*(1 + ZPERC*(DEFR**REXP))*(UZFWC/UZFWM)
+
+                # PERCOLACAO (d) - Calcula a percolacao real de acordo com as
+                # disponibilidades em UZFW e nos rsvs da LZ.
                 if PERC > UZFWC:
                     PERC = UZFWC
-                if PERC > SLZ_DEF:
-                    PERC = SLZ_DEF
+                DEFA = LZTWM + LZFPM + LZFSM - (LZTWC + LZFPC + LZFSC)
+                if PERC > DEFA:
+                    PERC = DEFA
                 UZFWC = UZFWC - PERC
-                SPERC = SPERC - PERC
+                SPERC = SPERC + PERC
 
-                # Escoamento subsuperficial (interflow)
+                # ESCOAMENTO SUBSUPERFICIAL (INTERFLOW)
+                # Calcula SIF aqui, mas soh vai utilizar a atualizacao de UZFWC
+                # no final deste condicional, na etapa de infiltracao
                 DEL = UZFWC * DUZ
-                UZFSC = UZFSC - DEL
                 SIF = SIF + DEL
+                UZFWC = UZFWC - DEL
 
-                # Distribuicao da agua percolada na zona inferior
-
-                # Primeiro de agua de tensao (PERCT)
+                # PERCOLACAO (e)
+                # Distribui o volume percolado entre os rsvs da LZ.
+                # Significado das variaveis:
+                #   PERCT - Volume de percolacao que vai para o LZTWM
+                #   EXC   - Volume que excede a capacidade do reservatorio
+                #   PERCF - Volume de percolacao que vai para o LZFP e LZFS
+                #   HPL   - Razao entre a capacidade maxima do rsv primario e a
+                #   capacidade maxima de armazenamento de agua livre da LZ
+                #   RATLP - Razao conteudo/capacidade do rsv primario
+                #   RATLS - Razao conteudo/capacidade do rsv suplementar
+                #   FRACP - Fracao de agua livre indo pro rsv primario
+                #   PERCP - Volume de percolacao que vai para o rsv primario
+                #   PERCS - Volume de percolacao que vai para o rsv suplementar
                 PERCT = PERC*(1 - PFREE)
                 if (PERCT + LZTWC) > LZTWM:
-                    # Agua em excesso eh adicionada ao PERCF
-                    PERCT_EXC = PERCT + LZTWC - LZTWM
+                    EXC = PERCT - (LZTWM - LZTWC)
                     LZTWC = LZTWM
                 else:
-                    # Nao vai para agua livre
-                    PERCT_EXC = 0
+                    EXC = 0
                     LZTWC = LZTWC + PERCT
-
-
-                # Depois agua livre (PERCF)
-                PERCF = PERCT_EXC + PERC*PFREE
-                # Depois de agua livre
+                PERCF = EXC + PERC*PFREE
                 if PERCF > 0:
-                    HPL   = LZFPM / (LZFPM + LZFSM)
+                    HPL   = LZFPM/(LZFPM + LZFSM)
                     RATLP = LZFPC/LZFPM
                     RATLS = LZFSC/LZFSM
-                    FRACP = min(1, HPL*2*(1-RATLP)/((1-RATLP)+(1-RATLS)))
-
+                    FRACP = HPL*2*(1-RATLP)/((1-RATLP)+(1-RATLS))
+                    if FRACP > 1 : FRACP= 1
                     PERCP = PERCF*FRACP
-
-                    # Primeiro coloca no suplementar (tentativo)
                     PERCS = PERCF - PERCP
                     if (LZFSC + PERCS) <= LZFSM:
-                        # PERCS = PERCS
                         LZFSC = LZFSC + PERCS
                     else:
                         PERCS = LZFSM - LZFSC
                         LZFSC = LZFSM
-
                     LZFPC = LZFPC + (PERCF - PERCS)
                     if (LZFPC > LZFPM):
-                        EXCESS = LZFPC - LZFPM
-                        LZTWC = LZTWC + EXCESS
+                        EXC   = LZFPC - LZFPM
+                        LZTWC = LZTWC + EXC
                         LZFPC = LZFPM
 
-                # Adiciona PINC no UZFWC E NO RSV SUPERFICIAL
+                # INFILTRACAO
+                # Passagem de agua excedente da superficie para o solo,
+                # ou seja, adiciona PINC ao UZFW
                 if PINC > 0:
 
-                    if (PINC + UZFWC) > UZFWM:
-                        # Parte que nao eh do escoamento direto
-                        SUR = (PINC + UZFWC) - UZFWM
+                    # ESCOAMENTO SUPERFICIAL
+                    if (PINC + UZFWC) > UZFWM
+                        SUR = PINC - (UZFWM - UZFWC)
                         UZFWC = UZFWM
                         SSUR = SSUR + SUR*PAREA
-                        # Do escoament direto
-                        ADSUR = SUR*(1 - ADDRO/PINC)
+                        ADSUR = SUR*(1 - AADRO/PINC)
                         SSUR = SSUR + ADSUR*ADIMP
-
                     else:
+                        # PINC = 0
                         UZFWC = UZFWC + PINC
+            else:
+                # (PINC+UZFWC) <= 0.01
+                # NAO HA agua livre disponivel na UZ; nao ocorre percolacao
+                UZFWC = UZFWC + PINC
 
+            # ESCOAMENTO DIRETO DA AREA IMPERMEAVEL ADICIONAL
             ADIMC = ADIMC + PINC - ADDRO - ADSUR
             if ADIMC > UZTWM + LZTWM:
                 ADDRO = ADDRO + ADIMC - (UZTWM + LZTWM)
@@ -331,24 +329,34 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
         # FIM DO LOOP INTERNO
         ########################################################################
 
+
+        ### AQUI PRECISA MELHORAR A DESCRICAO
+        # Computa os somatorios dos escoamentos e ajusata-os as areas nas quais
+        # sao gerados...
+        SBF = SPBF + SSBF
+        TBF = SBF*PAREA
+        BFCC = TBF*(1/(1+SIDE))
+        BFP = SPBF*PAREA/(1+SIDE)
+        BFS = BFCC - BFP
+        if BFS < 0 : BFS = 0.0
+        BFNCC = TBF - BFCC
+
+        TCI = ROIMP + SDRO + SSUR + SIF + BFCC
+
+        EUSED = E1 + E2 + E3
+        E4 = (EDMND - EUSED)*RIVA
+
+        TCI = TCI - E4
+        if (TCI < 0):
+            E4 = E4 + TCI
+            TCI = 0
+
+        SROT = SROT + TCI
+
+        if ADIMC < UZTWC : ADIMC = UZTWC
+        ### ATE AQUI
+
+
     ############################################################################
     # FIM DO LOOP EXTERNO
     ############################################################################
-
-    TBF = SBR*PAREA
-    BFCC = TBF*(1/(1+SIDE))
-    BFP = SPBF*PAREA/(1+SIDE)
-    BFS = BFCC - BFP
-    BFNCC = TBF - BFCC
-
-    TCI = ROIMP + SDRO + SSUR + SIF + BFCC
-
-    EUSED = E1 + E2 + E3
-    E4 = (EDMND - EUSED)*RIVA
-
-    TCI = TCI - E4
-    if (TCI < 0):
-        E4 = E4 + TCI
-        TCI = 0
-
-    SROT = SROT + TCI
