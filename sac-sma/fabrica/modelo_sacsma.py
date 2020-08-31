@@ -6,8 +6,8 @@ Revisao:
 import numpy as np
 import pandas as pd
 
-def sac_sma_detalhado(X, PME, ETP, Est=None):
-    print("Executando SAC-SMA em modo de simulacao detalhada...")
+def sac_sma_detalhado(X, PME, ETP, St=None):
+    print("Executando modelo Sac-SMA em modo de simulacao detalhada...")
 
     ## X - parametros
     # 13 obrigatorios
@@ -29,8 +29,8 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
     SIDE  = X.get("SIDE", 0.0)
     RSERV = X.get("RSERV", 0.3)
 
-    # Est - variaveis de estado
-    if Est is None:
+    # St - variaveis de estado
+    if St is None:
         UZTWC = UZTWM * 0.5
         UZFWC = UZFWM * 0.5
         LZTWC = LZTWM * 0.5
@@ -38,16 +38,19 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
         LZFSC = LZFSM * 0.5
         ADIMC = UZTWC + LZTWC
     else:
-        UZTWC = Est.get("UZTWM")
-        UZFWC = Est.get("UZFWM")
-        LZTWC = Est.get("LZTWM")
-        LZFPC = Est.get("LZFPM")
-        LZFSC = Est.get("LZFSM")
-        ADIMC = Est.get("ADIMC")
+        UZTWC = St.get("UZTWM")
+        UZFWC = St.get("UZFWM")
+        LZTWC = St.get("LZTWM")
+        LZFPC = St.get("LZFPM")
+        LZFSC = St.get("LZFSM")
+        ADIMC = St.get("ADIMC")
 
     # AREA PEARMEAVEL PERMANENTE (PAREA)
-    # O Sac-SMA considera 3 areas: uma sempre permeavel (PAREA); outra sempre
-    # impermeavel (PCTIM); e outra permeavel variavel limitada a ADIMP.
+    # O Sac-SMA considera 3 areas superficias:
+    # PAREA - permeavel de tamanho constante;
+    # PCTIM - impermeavel de tamanho constante;
+    # ADIMC - permeavel de tamanho variavel, limitada a ADIMP.
+    # Sao fracoes, portante, PAREA + PCTIM + ADIMP = 1.
     PAREA = 1 - ADIMP - PCTIM
     ############################################################################
     # INICIO DO LOOP EXTERNO
@@ -164,8 +167,9 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
         ADIMC = ADIMC + PXV - TWX
 
         # AREA IMPERMEAVEL PERMANENTE
+        #
         ROIMP = PXV * PCTIM
-        SIMPVT = SIMPVT + ROIMP # ???
+        # SIMPVT = SIMPVT + ROIMP (me parece redundante)
 
         # Variaveis do loop interno
         SSUR  = 0 # Somatorio do escoamento superficial
@@ -201,7 +205,8 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
             ADSUR = 0 # Escoamento superficial gerado na area ADIMP (0 a priori)
 
             # ESCOAMENTO DIRETO DA AREA ADIMP
-            RATIO = (ADIMC - UZTWC) / LZTWM
+            # A fracao de ADIMP
+            RATIO = (ADIMC - UZTWC) / LZTWM #
             if RATIO < 0 : RATIO = 0
             ADDRO = PINC*(RATIO**2) # ???
 
@@ -299,16 +304,20 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
                         LZFPC = LZFPM
 
                 # INFILTRACAO
-                # Passagem de agua excedente da superficie para o solo,
+                # Passagem de agua livre excedente da superficie para o solo,
                 # ou seja, adiciona PINC ao UZFW
                 if PINC > 0:
-
                     # ESCOAMENTO SUPERFICIAL
+                    # Ocorre somente quando a altura incremental + a agua livre
+                    # do UZFW superam a capacidade maxima.
+                    # Na area permeavel constante, basta multiplicar o SUR pela
+                    # PAREA, ja calculada antes do Loop Externo.
+                    # Ja na area permeavel variavel, o escoamento superificll
                     if (PINC + UZFWC) > UZFWM
                         SUR = PINC - (UZFWM - UZFWC)
                         UZFWC = UZFWM
                         SSUR = SSUR + SUR*PAREA
-                        ADSUR = SUR*(1 - AADRO/PINC)
+                        ADSUR = SUR*(1 - ADDRO/PINC) # ???
                         SSUR = SSUR + ADSUR*ADIMP
                     else:
                         # PINC = 0
@@ -323,11 +332,19 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
             if ADIMC > UZTWM + LZTWM:
                 ADDRO = ADDRO + ADIMC - (UZTWM + LZTWM)
                 ADIMC = UZTWM + LZTWM
-            SDOR = SDOR + ADDRO*ADIMP
+            SDRO = SDRO + ADDRO*ADIMP
             if ADIMC < 0.00001 : ADIMC = 0
         ########################################################################
         # FIM DO LOOP INTERNO
         ########################################################################
+
+
+        # AREA IMPERMEAVEL ADICIONAL
+        # ADIMC eh uma altura pluviometrica que representa a area saturada
+        # da bacia. Essa area eh variavel, limitada e proprocional a umidade
+        # relativa dos UZTW, ou seja, quanto mais saturado estiver de agua de
+        # tensao, maior eh essa area impermeavel adicional.
+
 
 
         ### AQUI PRECISA MELHORAR A DESCRICAO
@@ -341,6 +358,7 @@ def sac_sma_detalhado(X, PME, ETP, Est=None):
         if BFS < 0 : BFS = 0.0
         BFNCC = TBF - BFCC
 
+        # TCI -
         TCI = ROIMP + SDRO + SSUR + SIF + BFCC
 
         EUSED = E1 + E2 + E3
