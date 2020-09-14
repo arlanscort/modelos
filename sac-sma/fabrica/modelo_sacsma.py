@@ -1,33 +1,44 @@
 '''
 Implementacao: Arlan Scortegagna, agosto de 2020
-Revisao:
+Revisao: Louise Kuana, setembro de 2020
 '''
 
 import numpy as np
 import pandas as pd
 
-def sac_sma_detalhado(X, PME, ETP, St=None):
+#def sac_sma_detalhado(X, PME, ETP, St=None):
+def sac_sma_detalhado(parametros, PME, ETP, St=None):
     print("Executando modelo Sac-SMA em modo de simulacao detalhada...")
 
     ## X - parametros
     # 13 obrigatorios
-    UZTWM = X.get("UZTWM") #
-    UZFWM = X.get("UZFWM") #
-    LZTWM = X.get("LZTWM") #
-    LZFSM = X.get("LZFSM") #
-    LZFPM = X.get("LZFPM") #
-    UZK   = X.get("UZK")   #
-    LZSK  = X.get("LZSK")  #
-    LZPK  = X.get("LZPK")  #
-    PFREE = X.get("PFREE") #
-    ZPERC = X.get("ZPERC") #
-    REXP  = X.get("REXP")  #
-    PCTIM = X.get("PCTIM") #
-    ADIMP = X.get("ADIMP") #
+    UZTWM = parametros['valor']['UZTWM'] #
+    UZFWM = parametros['valor']['UZFWM'] #
+    LZTWM = parametros['valor']['LZTWM'] #
+    LZFSM = parametros['valor']['LZFSM'] #
+    LZFPM = parametros['valor']['LZFPM'] #
+    UZK   = parametros['valor']['UZK']   #
+    LZSK  = parametros['valor']['LZSK']  #
+    LZPK  = parametros['valor']['LZPK']  #
+    PFREE = parametros['valor']['PFREE'] #
+    ZPERC = parametros['valor']['ZPERC'] #
+    REXP  = parametros['valor']['REXP']  #
+    PCTIM = parametros['valor']['PCTIM'] #
+    ADIMP = parametros['valor']['ADIMP'] #
+
     # 3 opcionais
-    RIVA  = X.get("RIVA", 0.0)
-    SIDE  = X.get("SIDE", 0.0)
-    RSERV = X.get("RSERV", 0.3)
+    try:
+        RIVA = parametros['valor']['RIVA']
+    except:
+        RIVA  = 0.0
+    try:
+        SIDE = parametros['valor']['SIDE']
+    except:
+        SIDE  = 0.0
+    try:
+        RSERV = parametros['valor']['RSERV']
+    except:
+        RSERV = 0.3
 
     # St - variaveis de estado
     if St is None:
@@ -45,8 +56,15 @@ def sac_sma_detalhado(X, PME, ETP, St=None):
         LZFSC = St.get("LZFSM")
         ADIMC = St.get("ADIMC")
 
+
+    # Inicializacao do DataFrame
+    colunas_estados   = ['UZTWC','UZFWC','LZTWC','LZFPC','LZFSC','ADIMC']
+    colunas_escoamentos = ['PERC','ROIMP+SDRO','SSUR','SIF','SBF_S','SBF_P']
+
+    df = pd.DataFrame(columns=(colunas_estados + colunas_escoamentos))
+
     # AREA PEARMEAVEL PERMANENTE (PAREA)
-    # O Sac-SMA considera 3 areas superficias:
+    # O Sac-SMA considera 3 areas superficiais:
     # PAREA - permeavel de tamanho constante;
     # PCTIM - impermeavel de tamanho constante;
     # ADIMC - permeavel de tamanho variavel, limitada a ADIMP.
@@ -90,8 +108,11 @@ def sac_sma_detalhado(X, PME, ETP, St=None):
         #   SAVED  - agua livre reservada, nao sujeita a evapotranspiracao
         #   RATLZT - Relacao conteudo/capacidade de agua de tensao na LZ
         #   RATLZ  - Relacao conteudo/capacidade de umidade total na LZ
+
+
+
         EP1 = EP*(UZTWC/UZTWM)
-        if UTZWC >= EPUZ:
+        if UTZWC >= EP1:
             E1 = EP1
             E2 = 0
         else:
@@ -145,7 +166,7 @@ def sac_sma_detalhado(X, PME, ETP, St=None):
         # Significados das variaveis:
         #   PXV - altura pluviometrica global
         #   TWX - altura pluviometrica superavitaria
-        if PXV >= (UZTWM - UZTWC)
+        if PXV >= (UZTWM - UZTWC):
             TWX = PXV - (UZTWM - UZTWC)
             UZTWC = UZTWM
         else:
@@ -312,8 +333,8 @@ def sac_sma_detalhado(X, PME, ETP, St=None):
                     # do UZFW superam a capacidade maxima.
                     # Na area permeavel constante, basta multiplicar o SUR pela
                     # PAREA, ja calculada antes do Loop Externo.
-                    # Ja na area permeavel variavel, o escoamento superificll
-                    if (PINC + UZFWC) > UZFWM
+                    # Ja na area permeavel variavel, o escoamento superficial
+                    if (PINC + UZFWC) > UZFWM:
                         SUR = PINC - (UZFWM - UZFWC)
                         UZFWC = UZFWM
                         SSUR = SSUR + SUR*PAREA
@@ -339,42 +360,50 @@ def sac_sma_detalhado(X, PME, ETP, St=None):
         ########################################################################
 
 
-        # AREA IMPERMEAVEL ADICIONAL
-        # ADIMC eh uma altura pluviometrica que representa a area saturada
-        # da bacia. Essa area eh variavel, limitada e proprocional a umidade
-        # relativa dos UZTW, ou seja, quanto mais saturado estiver de agua de
-        # tensao, maior eh essa area impermeavel adicional.
-
-
 
         ### AQUI PRECISA MELHORAR A DESCRICAO
         # Computa os somatorios dos escoamentos e ajusata-os as areas nas quais
         # sao gerados...
+        # SBF - Somatorio dos escoamentos de base (primario e suplementar);
+        # TBF - Escoamento de base gerado pela area permeavel de tamanho constante;
+        # SIDE - Quantidade de água do canal que infiltra (profundamente) e que depois eh descontado
+        # BFCC - Componente do fluxo de base do canal
+        # BFP - Componente de contribuicao da vazao de base do reservatorio primario
+        # BFS - Componente de contribuicao da vazao de base do reservatorio suplementar
+        # BFNCC - Componente do fluxo de base do canal que sai para fora da bacia
         SBF = SPBF + SSBF
         TBF = SBF*PAREA
-        BFCC = TBF*(1/(1+SIDE))
+        BFCC = TBF/(1+SIDE)
         BFP = SPBF*PAREA/(1+SIDE)
         BFS = BFCC - BFP
         if BFS < 0 : BFS = 0.0
         BFNCC = TBF - BFCC
 
-        # TCI -
+        # TCI - Somatorio dos escoamentos na superficie
         TCI = ROIMP + SDRO + SSUR + SIF + BFCC
 
+        # EUSED - Somatorio da evapotranspiracao real do UZFW, UZTW e LZTW
         EUSED = E1 + E2 + E3
-        E4 = (EDMND - EUSED)*RIVA
+
+        # RIVA - % de cobertura vegetal nas areas ribeirinhas
+        # E4 - componente da evapotranspiracao real da cobertura vegetal
+        E4 = (EP - EUSED)*RIVA
 
         TCI = TCI - E4
         if (TCI < 0):
             E4 = E4 + TCI
             TCI = 0
 
-        SROT = SROT + TCI
+
+        #SROT = SROT + TCI # variavel nao declarada SROT!!!
 
         if ADIMC < UZTWC : ADIMC = UZTWC
         ### ATE AQUI
 
-
+        df.loc[i,['UZTWC','UZFWC','LZTWC','LZFPC','LZFSC','ADIMC']] = UZTWC, UZFWC, LZTWC, LZFPC, LZFSC, ADIMC
+        df.loc[i,['PERC','ROIMP+SDRO','SSUR','SIF','BFS','BFP','TCI']] = PERC, ROIMP+SDRO, SSUR, SIF, BFS, BFP, TCI
     ############################################################################
     # FIM DO LOOP EXTERNO
     ############################################################################
+
+    return df
