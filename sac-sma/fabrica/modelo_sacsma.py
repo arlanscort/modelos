@@ -1,47 +1,40 @@
 '''
-Implementacao: Arlan Scortegagna, agosto de 2020
-Revisao: Louise Kuana, setembro de 2020
-'''
+Implementacao - Arlan Scortegagna, agosto de 2020
+Revisao - Louise Kuana, setembro de 2020
 
+Argumentos:
+    Forcantes - pandas DataFrame contendo datas como indice em formato datetime
+    Parametros - pandas DataFrame contendo parametros e seus respectivos valores
+    Estados - dicionario contendo os nomes dos estados como chaves
+'''
 import numpy as np
 import pandas as pd
 
-#def sac_sma_detalhado(X, PME, ETP, St=None):
-def sac_sma_detalhado(parametros, PME, ETP, St=None):
-    print("Executando modelo Sac-SMA em modo de simulacao detalhada...")
+def sac_sma_detalhado(Forcantes, Parametros, Estados=None):
+    print('Executando SAC-SMA em modo de simulacao detalhada...')
 
-    ## X - parametros
+    # Parametros
     # 13 obrigatorios
-    UZTWM = parametros['valor']['UZTWM'] #
-    UZFWM = parametros['valor']['UZFWM'] #
-    LZTWM = parametros['valor']['LZTWM'] #
-    LZFSM = parametros['valor']['LZFSM'] #
-    LZFPM = parametros['valor']['LZFPM'] #
-    UZK   = parametros['valor']['UZK']   #
-    LZSK  = parametros['valor']['LZSK']  #
-    LZPK  = parametros['valor']['LZPK']  #
-    PFREE = parametros['valor']['PFREE'] #
-    ZPERC = parametros['valor']['ZPERC'] #
-    REXP  = parametros['valor']['REXP']  #
-    PCTIM = parametros['valor']['PCTIM'] #
-    ADIMP = parametros['valor']['ADIMP'] #
-
+    UZTWM = Parametros.loc['UZTWM','valor']
+    UZFWM = Parametros.loc['UZFWM','valor']
+    LZTWM = Parametros.loc['LZTWM','valor']
+    LZFSM = Parametros.loc['LZFSM','valor']
+    LZFPM = Parametros.loc['LZFPM','valor']
+    UZK   = Parametros.loc['UZK','valor']
+    LZSK  = Parametros.loc['LZSK','valor']
+    LZPK  = Parametros.loc['LZPK','valor']
+    PFREE = Parametros.loc['PFREE','valor']
+    ZPERC = Parametros.loc['ZPERC','valor']
+    REXP  = Parametros.loc['REXP','valor']
+    PCTIM = Parametros.loc['PCTIM','valor']
+    ADIMP = Parametros.loc['ADIMP','valor']
     # 3 opcionais
-    try:
-        RIVA = parametros['valor']['RIVA']
-    except:
-        RIVA  = 0.0
-    try:
-        SIDE = parametros['valor']['SIDE']
-    except:
-        SIDE  = 0.0
-    try:
-        RSERV = parametros['valor']['RSERV']
-    except:
-        RSERV = 0.3
+    RIVA  = Parametros['valor'].get(['RIVA'], 0)
+    SIDE  = Parametros['valor'].get(['SIDE'], 0)
+    RSERV = Parametros['valor'].get(['RSERV'], 0.3)
 
-    # St - variaveis de estado
-    if St is None:
+    # Variaveis de estado
+    if Estados is None:
         UZTWC = UZTWM * 0.5
         UZFWC = UZFWM * 0.5
         LZTWC = LZTWM * 0.5
@@ -49,19 +42,18 @@ def sac_sma_detalhado(parametros, PME, ETP, St=None):
         LZFSC = LZFSM * 0.5
         ADIMC = UZTWC + LZTWC
     else:
-        UZTWC = St.get("UZTWM")
-        UZFWC = St.get("UZFWM")
-        LZTWC = St.get("LZTWM")
-        LZFPC = St.get("LZFPM")
-        LZFSC = St.get("LZFSM")
-        ADIMC = St.get("ADIMC")
-
+        UZTWC = Estados["UZTWM"]
+        UZFWC = Estados["UZFWM"]
+        LZTWC = Estados["LZTWM"]
+        LZFPC = Estados["LZFPM"]
+        LZFSC = Estados["LZFSM"]
+        ADIMC = Estados["ADIMC"]
 
     # Inicializacao do DataFrame
-    colunas_estados   = ['UZTWC','UZFWC','LZTWC','LZFPC','LZFSC','ADIMC']
-    colunas_escoamentos = ['PERC','ROIMP+SDRO','SSUR','SIF','SBF_S','SBF_P']
-
-    df = pd.DataFrame(columns=(colunas_estados + colunas_escoamentos))
+    cols_estados = ['UZTWC','UZFWC','LZTWC','LZFPC','LZFSC','ADIMC']
+    cols_saidas  = ['ROIMP','SDRO','SSUR','SIF','BFP','BFS', 'BFCC', 'E4', \
+                    'TCI', 'TET', 'BFNCC']
+    DF = pd.DataFrame(columns=cols_estados+cols_saidas)
 
     # AREA PEARMEAVEL PERMANENTE (PAREA)
     # O Sac-SMA considera 3 areas superficiais:
@@ -73,8 +65,9 @@ def sac_sma_detalhado(parametros, PME, ETP, St=None):
     ############################################################################
     # INICIO DO LOOP EXTERNO
     ############################################################################
-    for PXV, EP in zip(PME, ETP):
-
+    for row in Forcantes.itertuples(PME, ETP):
+        ETP = row[1]
+        PME = row[2]
     # Siglas:
     # UZ - Zona Superior (Upper Zone)
     # LZ - Zona Inferior (Lower Zone)
@@ -108,9 +101,6 @@ def sac_sma_detalhado(parametros, PME, ETP, St=None):
         #   SAVED  - agua livre reservada, nao sujeita a evapotranspiracao
         #   RATLZT - Relacao conteudo/capacidade de agua de tensao na LZ
         #   RATLZ  - Relacao conteudo/capacidade de umidade total na LZ
-
-
-
         EP1 = EP*(UZTWC/UZTWM)
         if UTZWC >= EP1:
             E1 = EP1
@@ -188,9 +178,8 @@ def sac_sma_detalhado(parametros, PME, ETP, St=None):
         ADIMC = ADIMC + PXV - TWX
 
         # AREA IMPERMEAVEL PERMANENTE
-        #
         ROIMP = PXV * PCTIM
-        # SIMPVT = SIMPVT + ROIMP (me parece redundante)
+        # SIMPVT = SIMPVT + ROIMP (redundante?)
 
         # Variaveis do loop interno
         SSUR  = 0 # Somatorio do escoamento superficial
@@ -359,8 +348,6 @@ def sac_sma_detalhado(parametros, PME, ETP, St=None):
         # FIM DO LOOP INTERNO
         ########################################################################
 
-
-
         ### AQUI PRECISA MELHORAR A DESCRICAO
         # Computa os somatorios dos escoamentos e ajusata-os as areas nas quais
         # sao gerados...
@@ -388,22 +375,24 @@ def sac_sma_detalhado(parametros, PME, ETP, St=None):
         # RIVA - % de cobertura vegetal nas areas ribeirinhas
         # E4 - componente da evapotranspiracao real da cobertura vegetal
         E4 = (EP - EUSED)*RIVA
-
         TCI = TCI - E4
         if (TCI < 0):
             E4 = E4 + TCI
             TCI = 0
 
+        # TET - Evapotranspiracao real total
+        TET = EUSED*PAREA + E5 + E4
 
         #SROT = SROT + TCI # variavel nao declarada SROT!!!
-
         if ADIMC < UZTWC : ADIMC = UZTWC
-        ### ATE AQUI
 
-        df.loc[i,['UZTWC','UZFWC','LZTWC','LZFPC','LZFSC','ADIMC']] = UZTWC, UZFWC, LZTWC, LZFPC, LZFSC, ADIMC
-        df.loc[i,['PERC','ROIMP+SDRO','SSUR','SIF','BFS','BFP','TCI']] = PERC, ROIMP+SDRO, SSUR, SIF, BFS, BFP, TCI
+        # Inclusao dos resultados da iteracao no
+        dados = [UZTWC, UZFWC, LZTWC, LZFPC, LZFSC, ADIMC, ROIMP, SDRO, SSUR, \
+                SIF, BFP, BFS, BFCC, E4, TCI, TET, BFNCC]
+        DF = DF.append(pd.Series(index=DF.columns, data=dados, name=row[0]))
     ############################################################################
     # FIM DO LOOP EXTERNO
     ############################################################################
 
-    return df
+    print('Fim')
+    return DF
