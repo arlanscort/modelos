@@ -9,6 +9,7 @@ Argumentos:
 '''
 import numpy as np
 import pandas as pd
+from matplotlib import pyplot as plt
 
 def sac_sma_detalhado(Forcantes, Parametros, Estados=None):
     print('Executando SAC-SMA em modo de simulacao detalhada...')
@@ -68,6 +69,7 @@ def sac_sma_detalhado(Forcantes, Parametros, Estados=None):
     for row in Forcantes.itertuples():
         EP = row[1]
         PXV = row[2]
+
     # Siglas:
     # UZ - Zona Superior (Upper Zone)
     # LZ - Zona Inferior (Lower Zone)
@@ -106,7 +108,7 @@ def sac_sma_detalhado(Forcantes, Parametros, Estados=None):
             E1 = EP1
             E2 = 0
         else:
-            E1 = UTZWC
+            E1 = UZTWC
             EP2 = EP - E1
             if UZFWC >= EP2:
                 E2 = EP2
@@ -125,7 +127,7 @@ def sac_sma_detalhado(Forcantes, Parametros, Estados=None):
         if LZTWC >= EP3:
             E3 = EP3
         else:
-            E3 = LZWTC
+            E3 = LZTWC
         LZTWC = LZTWC - E3
         if LZTWC <= 0.00001 : LZTWC = 0
         SAVED = RSERV*(LZFPM + LZFSM)
@@ -140,7 +142,7 @@ def sac_sma_detalhado(Forcantes, Parametros, Estados=None):
                 DEL = DEL - LZFSC
                 LZFSC = 0
                 LZFPC = LZFPC - DEL
-        EP5 = E1 + (RED + E2)*((ADIMC - E1 - UZTWC)/(UZTWM + LZTWM)) # ???
+        EP5 = E1 + (RED + E2)*((ADIMC - E1 - UZTWC)/(UZTWM + LZTWM))
         if ADIMC >= EP5:
             E5 = EP5
             ADIMC = ADIMC - E5
@@ -177,7 +179,7 @@ def sac_sma_detalhado(Forcantes, Parametros, Estados=None):
         # (max), logo toda a precipitacao vai incrementar ADIMC.
         ADIMC = ADIMC + PXV - TWX
 
-        # AREA IMPERMEAVEL PERMANENTE
+        # ROIMP RUNOFF DA ÁREA IMPERMEAVEL PERMANENTE
         ROIMP = PXV * PCTIM
         # SIMPVT = SIMPVT + ROIMP (redundante?)
 
@@ -218,7 +220,8 @@ def sac_sma_detalhado(Forcantes, Parametros, Estados=None):
             # A fracao de ADIMP
             RATIO = (ADIMC - UZTWC) / LZTWM #
             if RATIO < 0 : RATIO = 0
-            ADDRO = PINC*(RATIO**2) # ???
+            # ADDRO eh a quantidade de escoamento direto da ADIMP
+            ADDRO = PINC*(RATIO**2)
 
             # PERCOLACAO (b)
             # Retira agua livre do LZFP e LZFS, liberando volume desses reserva-
@@ -327,7 +330,7 @@ def sac_sma_detalhado(Forcantes, Parametros, Estados=None):
                         SUR = PINC - (UZFWM - UZFWC)
                         UZFWC = UZFWM
                         SSUR = SSUR + SUR*PAREA
-                        ADSUR = SUR*(1 - ADDRO/PINC) # ???
+                        ADSUR = SUR*(1 - ADDRO/PINC)
                         SSUR = SSUR + ADSUR*ADIMP
                     else:
                         # PINC = 0
@@ -366,7 +369,7 @@ def sac_sma_detalhado(Forcantes, Parametros, Estados=None):
         if BFS < 0 : BFS = 0.0
         BFNCC = TBF - BFCC
 
-        # TCI - Somatorio dos escoamentos na superficie
+        # TCI - Somatorio dos escoamentos na superficie + Escoamentos de bases
         TCI = ROIMP + SDRO + SSUR + SIF + BFCC
 
         # EUSED - Somatorio da evapotranspiracao real do UZFW, UZTW e LZTW
@@ -392,6 +395,59 @@ def sac_sma_detalhado(Forcantes, Parametros, Estados=None):
         DF = DF.append(pd.Series(index=DF.columns, data=dados, name=row[0]))
     ############################################################################
     # FIM DO LOOP EXTERNO
+    ############################################################################
+
+    ############################################################################
+    # FASE propagação do escoamento supercial com 3 reservatórios lineares
+    ############################################################################
+
+    # obtem dados incrementais e do parametro k
+    QIN1 = Forcantes.get(['qin1'], None)
+    # somatorio das vazoes da zona superior UZ
+    QUZ = DF['ROIMP'] + DF['SSUR'] + DF['SDRO'] + DF['SIF'] - DF['E4']
+    k = Parametros['valor'].get(['k'], 0.50039395)
+    QOBS = np.array([i for i in Forcantes['qobs']])
+
+    # numero de reservatorios
+    n_rsv = 3
+    dt = 1
+
+    # caso exista dados incrementais transformar QIN1 e QEN em um array numpy
+    if QIN1 is not None:
+        qin = np.array([i for i in Forcantes['qin1']])
+        quz = np.array([i for i in QUZ])
+        I = [sum(x) for x in zip(qin,quz)]
+
+    # caso nao exista dados incrementais qin sera 0
+    else:
+        qin = np.zeros(len(qobs))
+        quz = np.array([i for i in QUZ])
+        I = [sum(x) for x in zip(qin,quz)]
+
+
+    # iniciar arrays de vazao de saida dos reservatorios
+    qout = np.zeros(len(I))
+    qout[0] = I[0]
+
+    for n in range(n_rsv):
+        i = 0
+
+        while i+1 < len(I):
+            qout[i+1] = (2*k - dt)/(2*k + dt)*qout[i] + (dt)/(2*k + dt) * (I[i+1] + I[i])
+
+            i += 1
+
+        I = [x for x in qout]
+
+    plt.figure(figsize=(10,5))
+    plt.plot(DF.index, quz, label= 'quz')
+    plt.plot(DF.index, qout,label= 'qout')
+    plt.plot(DF.index, QOBS, color = 'black',label= 'qobs')
+    plt.legend()
+    plt.show()
+
+    ############################################################################
+    # FIM Da FASE de propagacao
     ############################################################################
 
     print('Fim')

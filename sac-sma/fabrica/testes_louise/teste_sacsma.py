@@ -3,6 +3,7 @@ Teste para aplicacao do modelo_sacsma.py
 Bacia teste: atibaia_valinhos
 '''
 import pandas as pd
+import numpy as np
 import modelo_sacsma
 from modelo_sacsma import sac_sma_detalhado
 from matplotlib import pyplot as plt
