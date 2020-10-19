@@ -1,6 +1,6 @@
 '''
 Implementacao - Arlan Scortegagna, set/2020
-Revisao - Louise Kuana, set/2020
+Revisao -
 '''
 # Modelo proposto - serie de n reservatorio lineares com constante k
 # Para cada reservatorio, S = k*Q
@@ -48,6 +48,7 @@ def rsvs_lin_sol_diferencial(Qcmon, dt, k, n):
     return Qprop
 
 
+### Teste com exemplo do Ven te Chow (1988), pg. 262
 import pandas as pd
 idx = [6*i for i in range(0,11)]
 Qcmon = pd.Series(index=idx, data=[0]*len(idx))
