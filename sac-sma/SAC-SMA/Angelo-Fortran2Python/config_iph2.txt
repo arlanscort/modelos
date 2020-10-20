@@ -1,4 +1,0 @@
-   12.359469   38.379866    0.030355    0.001551    0.001000   14.461063  787.225709    0.127572   11.902699 
-/simepar/hidro/ModelosHidrologicos/RioDePedra/ecv_simul_zdr_pc.txt
-iph2_simul_zdr_pc.txt
-541.82 541.82
