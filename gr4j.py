@@ -27,9 +27,10 @@ Outros:
 --------------------------------------------------------------------------------
 '''
 
+# from modelos.propagacao import muskingum
 import numpy as np
 
-def f_OrdHU1(x4, D):
+def ordenadas_HU1(x4, D):
     n = int(np.ceil(x4))
     SH1 = np.zeros(n+1)
     for t in range(0, n+1):
@@ -43,7 +44,7 @@ def f_OrdHU1(x4, D):
     return OrdHU1, n
 
 
-def f_OrdHU2(x4, D):
+def ordenadas_HU2(x4, D):
     m = int(np.ceil(2*x4))
     SH2 = np.zeros(m+1)
     for t in range(0, m+1):
@@ -59,7 +60,7 @@ def f_OrdHU2(x4, D):
     return OrdHU2, m
 
 
-def sim(PME, ETP, area, x1, x2, x3, x4, Estados=None):
+def sim_muskingum(area, PME, ETP, x1, x2, x3, x4, k, x, Qmon=None, Estados=None):
     '''
     Variaveis internas
         P1 - altura de precipitacao do passo de tempo
@@ -78,8 +79,8 @@ def sim(PME, ETP, area, x1, x2, x3, x4, Estados=None):
     beta  = 2.25 # p/ modelos horarios, beta = 5.25 (Ficchi, 2017, p. 266)
 
     # Calcula as ordenadas do HUs
-    OrdHU1, n = f_OrdHU1(x4, D)
-    OrdHU2, m = f_OrdHU2(x4, D)
+    OrdHU1, n = ordenadas_HU1(x4, D)
+    OrdHU2, m = ordenadas_HU2(x4, D)
 
     # Atribui os estados iniciais
     if Estados is None:
@@ -148,11 +149,17 @@ def sim(PME, ETP, area, x1, x2, x3, x4, Estados=None):
     # Consolida as vazoes em m3/s (mm -> m3/s)
     Q = Q*(area/86.4)
 
+    # Propagacao das vazoes de montante
+    if Qmon is not None:
+        from modelos.propagacao import muskingum
+        Qprop = muskingum(Qmon, k, x)
+        Q += Qprop
+
     return Q
 
-# AQUI TEM QUE AJEITAR!
-# def sim_detalhada(PME, ETP, x1, x2, x3, x4, Estados=None):
-#
+
+def sim_detalhada(PME, ETP, x1, x2, x3, x4, Estados=None):
+
 #     ### TEM QUE TERMINAR, FORAM FEITAS MODIFICAÇ˜OES
 #     # Calcula as ordenadas do HUs com base no parametro x4
 #     OrdHU1 = f_gera_OrdHU1(x4)
@@ -254,4 +261,4 @@ def sim(PME, ETP, area, x1, x2, x3, x4, Estados=None):
 #
 #     DF = pd.concat([Forcantes, DF], axis=1)
 #     print('Simulacao concluida!')
-#     return DF
+    return 0
