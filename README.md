@@ -1,2 +1,2 @@
 # modelos
-Repositório contendo modelos hidrológicos e funções correlatas. 
+Modelos hidrológicos desenvolvidos por Arlan Scortegagna e equipe.
