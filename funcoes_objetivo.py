@@ -4,6 +4,7 @@ Arquivo contendo as funcoes objetivo
 
 import numpy as np
 
+
 def NSE(simulation, evaluation, h_aq):
     # Nash-Sutcliffe efficiency (NSE)
     # 1 - Limpar

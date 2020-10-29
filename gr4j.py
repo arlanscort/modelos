@@ -27,8 +27,9 @@ Outros:
 --------------------------------------------------------------------------------
 '''
 
-# from modelos.propagacao import muskingum
 import numpy as np
+import propagacao
+
 
 def ordenadas_HU1(x4, D):
     n = int(np.ceil(x4))
@@ -60,7 +61,7 @@ def ordenadas_HU2(x4, D):
     return OrdHU2, m
 
 
-def sim_muskingum(area, PME, ETP, x1, x2, x3, x4, k, x, Qmon=None, Estados=None):
+def gr4j_nash(area, PME, ETP, x1, x2, x3, x4, k, n, Qmon=None, Estados=None):
     '''
     Variaveis internas
         P1 - altura de precipitacao do passo de tempo
@@ -72,6 +73,7 @@ def sim_muskingum(area, PME, ETP, x1, x2, x3, x4, k, x, Qmon=None, Estados=None)
         PERC - montante percolado
         PR - 'precipitacao efetiva' (na verdade, considera tb o PERC)
     '''
+
     # Constantes (passiveis de analise e estudo de caso)
     power = 4
     split = 0.9
@@ -149,10 +151,9 @@ def sim_muskingum(area, PME, ETP, x1, x2, x3, x4, k, x, Qmon=None, Estados=None)
     # Consolida as vazoes em m3/s (mm -> m3/s)
     Q = Q*(area/86.4)
 
-    # Propagacao das vazoes de montante
+    # Se for bacia incremental, adiciona Qprop
     if Qmon is not None:
-        from modelos.propagacao import muskingum
-        Qprop = muskingum(Qmon, k, x)
+        Qprop = nash(Qmon, k, n)
         Q += Qprop
 
     return Q
