@@ -153,7 +153,7 @@ def gr4j_nash(area, PME, ETP, x1, x2, x3, x4, k, n, Qmon=None, Estados=None):
 
     # Se for bacia incremental, adiciona Qprop
     if Qmon is not None:
-        Qprop = nash(Qmon, k, n)
+        Qprop = propagacao.nash(Qmon, k, n)
         Q += Qprop
 
     return Q

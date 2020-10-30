@@ -14,9 +14,9 @@ def plotar_hidro(idx, PME, ETP, Qobs, Qmon=None, Qsim=None):
     ax2.plot(idx, Qobs, label='Qobs', color='black')
     ax2.set_ylabel('Vazão (m3/s)')
     if Qmon is not None:
-        ax2.plot(idx, Qmon, label='Qmon', color='black', style='--')
+        ax2.plot(idx, Qmon, label='Qmon', color='black', linestyle='--')
 
-    for chave in Qsim:
-        ax2.plot(idx, Qsim[chave], label=chave)
+    # for chave in Qsim:
+    #     ax2.plot(idx, Qsim[chave], label=chave)
 
     return fig

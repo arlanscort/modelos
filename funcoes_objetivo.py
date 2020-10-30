@@ -21,7 +21,7 @@ def NSE(simulation, evaluation, h_aq):
     return NSE
 
 
-def sqrtNSE(simulation, evaluation):
+def sqrtNSE(simulation, evaluation, h_aq):
     # Nash-Sutcliffe efficiency (NSE) aplicada na raiz das vazoes
     # 1 - Limpar
     Qsim = np.array([])
@@ -40,7 +40,7 @@ def sqrtNSE(simulation, evaluation):
     return sqrtNSE
 
 
-def logNSE(simulation, evaluation):
+def logNSE(simulation, evaluation, h_aq):
     # Nash-Sutcliffe efficiency (NSE) aplicada no logaritmo das vazoes
     # 1 - Limpar serie observada
     Qsim = np.array([])
@@ -60,7 +60,7 @@ def logNSE(simulation, evaluation):
     return logNSE
 
 
-def KGE(simulation, evaluation):
+def KGE(simulation, evaluation, h_aq):
     # Kling-Gupta efficiency (KGE)
     # 1 - Limpar serie observada
     Qsim = np.array([])
