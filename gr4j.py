@@ -30,7 +30,6 @@ Outros:
 import numpy as np
 import propagacao
 
-
 def ordenadas_HU1(x4, D):
     n = int(np.ceil(x4))
     SH1 = np.zeros(n+1)
@@ -61,7 +60,7 @@ def ordenadas_HU2(x4, D):
     return OrdHU2, m
 
 
-def gr4j_cabeceira(area, PME, ETP, x1, x2, x3, x4, Estados=None):
+def gr4j(area, PME, ETP, x1, x2, x3, x4, Estados=None):
     '''
     Variaveis internas
         P1 - altura de precipitacao do passo de tempo
@@ -169,7 +168,7 @@ def gr4j_nash(area, PME, ETP, Qmon, x1, x2, x3, x4, k, n, Estados=None):
     # Constantes (passiveis de analise e estudo de caso)
     power = 4
     split = 0.9
-    D     = 2.5 # p/ modelos horarios, D = 1.25 (ver Ficchi, 2017, p. 51)
+    D     = 2.50 # p/ modelos horarios, D = 1.25 (ver Ficchi, 2017, p. 51)
     beta  = 2.25 # p/ modelos horarios, beta = 5.25 (Ficchi, 2017, p. 266)
 
     # Calcula as ordenadas do HUs
@@ -240,13 +239,12 @@ def gr4j_nash(area, PME, ETP, Qmon, x1, x2, x3, x4, k, n, Estados=None):
         # Escoamento total
         Q = np.append(Q, QR + QD)
 
-    # Consolida as vazoes em m3/s (mm -> m3/s)
+    # Converte as vazoes em m3/s (mm -> m3/s)
     Q = Q*(area/86.4)
 
-    # Se for bacia incremental, adiciona Qprop
-    if Qmon is not None:
-        Qprop = propagacao.nash(Qmon, k, n)
-        Q += Qprop
+    # Modelo para bacia incremental - adiciona Qprop
+    Qprop = propagacao.nash_sol_analitica(Qmon, k, n)
+    Q += Qprop
 
     return Q
 
@@ -342,103 +340,9 @@ def gr4j_muskingum(area, PME, ETP, Qmon, x1, x2, x3, x4, k, x, Estados=None):
     Q = Q*(area/86.4)
 
     # Se for bacia incremental, adiciona Qprop
-    if Qmon is not None:
-        Qprop = propagacao.muskingum(Qmon, k, x)
-        Q += Qprop
+    Qprop = propagacao.muskingum(Qmon, k, x)
+    Q += Qprop
 
-    return Q
-
-
-def gr4j_prop_interna(area, PME, ETP, Qmon, x1, x2, x3, x4, Estados=None):
-    '''
-    Variaveis internas
-        P1 - altura de precipitacao do passo de tempo
-        E  - altura de evapotranspiracao potencial do passo de tempo
-        PN - precipitacao liquida
-        EN - evapotranspiracao potencial liquida
-        PS - montante de precipitacao que entra no reservatorio de SMA
-        ES - montante que sai por evapotranspiracao do reservatorio de SMA
-        PERC - montante percolado
-        PR - 'precipitacao efetiva' (na verdade, considera tb o PERC)
-    '''
-
-    # Constantes (passiveis de analise e estudo de caso)
-    power = 4
-    split = 0.9
-    D     = 2.5 # p/ modelos horarios, D = 1.25 (ver Ficchi, 2017, p. 51)
-    beta  = 2.25 # p/ modelos horarios, beta = 5.25 (Ficchi, 2017, p. 266)
-
-    # Calcula as ordenadas do HUs
-    OrdHU1, n = ordenadas_HU1(x4, D)
-    OrdHU2, m = ordenadas_HU2(x4, D)
-
-    # Atribui os estados iniciais
-    if Estados is None:
-        Estados = {}
-    S = Estados.get('S', 0.6*x1)
-    R = Estados.get('R', 0.7*x3)
-    HU1 = Estados.get('HU1', np.zeros(n))
-    HU2 = Estados.get('HU2', np.zeros(m))
-
-    # Executa o processo iterativo
-    Q = np.array([], float)
-    for P1, E, qmon in np.nditer([PME,ETP,Qmon]):
-
-        # Executa interceptacao e balanco hidrico no reservatorio de SMA/prod.
-        if (P1-E) <= 0:
-            EN = E - P1
-            # !!! acelera calculo de ES !!!
-            TWS = 1 if EN/x1 > 13 else np.tanh(EN/x1)
-            ES  = S*(2 - S/x1)*TWS / (1 + (1 - S/x1)*TWS)
-            # !!! acelera calculo de ES !!!
-            S = S - ES
-            PR = 0 # (manter pq depois vai somar com o PERC)
-        else:
-            # enchimento
-            PN = P1 - E
-            # !!! acelera o calculo de PS !!!
-            TWS = 1 if PN/x1 > 13 else np.tanh(PN/x1)
-            PS  = x1*(1 - (S/x1)**2)*TWS / (1 + S/x1*TWS)
-            # !!! acelera o calculo de PS !!!
-            S = S + PS
-            PR = PN - PS
-
-        # Percolacao
-        PERC = S*(1 - (1 + (S/(beta*x1))**power)**(-1/4))
-        S = S - PERC
-
-        # 'Precipitacao efetiva'
-        PR += PERC + qmon*(86.4/area)
-
-
-        # Convolucao do HU1
-        HU1 += OrdHU1*(PR*split)
-        Q9 = HU1[0]
-        HU1 = np.roll(HU1, -1)
-        HU1[-1] = 0
-
-        # Convolucao do HU2
-        HU2 += OrdHU2*(PR*(1-split))
-        Q1 = HU2[0]
-        HU2 = np.roll(HU2, -1)
-        HU2[-1] = 0
-
-        # Montante de que PODE ser transferido para o aquifero
-        EXCH = x2*(R/x3)**(7/2)
-
-        # Escoamento do reservatorio de propagacao
-        R = max(0, R+Q9+EXCH)
-        QR = R*(1 - (1 + (R/x3)**power)**(-1/4))
-        R = R - QR
-
-        # Escoamento direto
-        QD = max(0, Q1+EXCH)
-
-        # Escoamento total
-        Q = np.append(Q, QR + QD)
-
-    # Consolida as vazoes em m3/s (mm -> m3/s)
-    Q = Q*(area/86.4)
     return Q
 
 
