@@ -73,8 +73,9 @@ def hymod_nash(area, Precip, PET, cmax, bexp, alpha, Rs, Rq, k, n, Qmon=None): #
     # Propagacao
     import numpy as np
     output = np.array(output)
-    Qprop = propagacao.nash(Qmon, k, n)
-    output += Qprop
+    if Qmon != None:
+        Qprop = propagacao.nash(Qmon, k, n)
+        output += Qprop
     # Conversao mm/dia -> m3/s
     output = output * area/86.4
 
