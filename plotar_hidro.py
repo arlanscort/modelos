@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-def plotar_hidro(idx, PME, ETP, Qobs, Qmon=None, Qsim=None):
+def plotar_hidro(idx, PME, ETP, Qobs, Qmon=None, Qsims=None):
 
     fig, (ax1, ax2) = plt.subplots(2, 1,sharex='all',gridspec_kw={'height_ratios': [1, 3]})
 
@@ -16,7 +16,9 @@ def plotar_hidro(idx, PME, ETP, Qobs, Qmon=None, Qsim=None):
     if Qmon is not None:
         ax2.plot(idx, Qmon, label='Qmon', color='black', linestyle='--')
 
-    # for chave in Qsim:
-    #     ax2.plot(idx, Qsim[chave], label=chave)
+    if Qsims is not None:
+        for chave in Qsims.keys():
+            ax2.plot(idx, Qsims[chave], label=chave)
+            ax2.legend(loc='upper right', fontsize=8)
 
     return fig

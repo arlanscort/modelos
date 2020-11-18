@@ -14,6 +14,8 @@ PLoS ONE, 10(12), e0145180, doi:10.1371/journal.pone.0145180, 2015.
 # from numba import jit
 
 import propagacao # INTERVENCAO ARLAN
+import funcoes_objetivo
+from spotpy.parameter import Uniform
 
 # def hymod(Precip, PET, cmax, bexp, alpha, Rs, Rq):
 def hymod_nash(area, Precip, PET, cmax, bexp, alpha, Rs, Rq, k, n, Qmon=None): # INTERVENCAO ARLAN
@@ -113,3 +115,36 @@ def excess(x_loss,cmax,bexp,Pval,PETval):
     xn = max(xn - evap, 0)  # update state
 
     return ER1,ER2,xn
+
+
+class setup_hymod(object):
+
+    cmax  = Uniform(low=1.0   , high=500)
+    bexp  = Uniform(low=0.1   , high=2.0)
+    alpha = Uniform(low=0.1   , high=0.99)
+    Ks    = Uniform(low=0.001 , high=0.10)
+    Kq    = Uniform(low=0.1   , high=0.99)
+    k     = Uniform(low=0.5   , high=7)
+    x     = Uniform(low=0.01  , high=0.5)
+
+    def __init__(self, area, PME, ETP, Qjus, Qmon=None, h_aq=0, fobj='KGE'):
+        self.area = area
+        self.PME  = PME
+        self.ETP  = ETP
+        self.Qjus = Qjus
+        self.Qmon = Qmon
+        self.h_aq = h_aq
+        self.fobj = fobj
+
+    def simulation(self, x):
+        Qsim = hymod_nash(self.area, self.PME, self.ETP, x[0], x[1], x[2], x[3], x[4], x[5], x[6], Qmon=self.Qmon)
+        return Qsim
+
+    def evaluation(self):
+        Qobs = self.Qjus
+        return Qobs
+
+    def objectivefunction(self, simulation, evaluation):
+        criterio = getattr(funcoes_objetivo, self.fobj)(simulation, evaluation, self.h_aq)
+        fmin = 1 - criterio
+        return fmin

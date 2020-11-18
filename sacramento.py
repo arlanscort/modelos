@@ -1,6 +1,6 @@
 '''
 --------------------------------------------------------------------------------
-Modelo Sacramento Soil Moisture Accounting (Sac-SMA)
+Modelo Hidrológico Sacramento Soil Moisture Accounting (SAC-SMA)
 --------------------------------------------------------------------------------
 Implementacao - Arlan Scortegagna, ago/2020
 Ultima atualizacao - Arlan Scortegagna, nov/2020
@@ -15,17 +15,31 @@ Parametros:
 Variaveis de Estado (inseridas no dicionario "Estados"):
 --------------------------------------------------------------------------------
 Outros:
+
+--------------------------------------------------------------------------------
+Observacoes:
+    Esse modelo foi traduzido a partir da funcao "fland1.f" obtida no repositorio
+    de Dan Bronman, Eng. Hidrólogo do Bureau of Reclamation, no link abaixo
+    << https://github.com/danbroman/NWS_SacSMA_source >>
+    O codigo fonte de fland1.f encontra-se na pasta de miscelaneas
+    A versao atualizada em nov/2020 considera a aplicacao de um hidrograma uni-
+    tario a precipitacao efetiva, produzida na zona superior, e a propagacao por
+    meio do metodo de Muskingum das vazoes de montante.
 --------------------------------------------------------------------------------
 '''
 
 import numpy as np
 import propagacao
+import hidrograma_unitario
+import funcoes_objetivo
+from spotpy.parameter import Uniform
 
-def sacramento_nash(area, PME, ETP,
-                    UZTWM, UZFWM, LZTWM, LZFSM, LZFPM, \
-                    UZK, LZSK, LZPK, PFREE, ZPERC, REXP, PCTIM, ADIMP, \
-                    k, n, Qmon=None, \
-                    RIVA=0, SIDE=0, RSERV=0.3, Estados=None):
+
+def sacramento(area, PME, ETP,
+                UZTWM, UZFWM, LZTWM, LZFSM, LZFPM, \
+                UZK, LZSK, LZPK, PFREE, ZPERC, REXP, PCTIM, ADIMP, \
+                k_HU, C1, C2, k_musk, x, Qmon=None, \
+                RIVA=0, SIDE=0, RSERV=0.3, Estados=None):
 
     # Atribuicao dos valores iniciais das variaveis de estados (Estados)
     if Estados is None:
@@ -48,13 +62,8 @@ def sacramento_nash(area, PME, ETP,
     # INICIO DO LOOP EXTERNO
     ############################################################################
 
-    # Modificacao - nov/2020
-    # Inicializando saidas
-    Quz = []
-    Qlz = []
-    EUSED = []
-    # Modificacao - nov/2020
-
+    QUZ_mm = []
+    QLZ_mm = []
     for PXV, EP in np.nditer([PME,ETP]):
     # Siglas:
     # UZ - Zona Superior (Upper Zone)
@@ -352,29 +361,32 @@ def sacramento_nash(area, PME, ETP,
         BFP = SPBF*PAREA/(1+SIDE)
         BFS = BFCC - BFP
         if BFS < 0 : BFS = 0.0
-        BFNCC = TBF - BFCC
+        # BFNCC = TBF - BFCC
 
-        # ######################### Modificacao - nov/2020 #####################
-        # # TCI - Somatorio dos escoamentos na superficie + Escoamentos de bases
-        # TCI = ROIMP + SDRO + SSUR + SIF + BFCC
-        #
-        # # EUSED - Somatorio da evapotranspiracao real do UZFW, UZTW e LZTW
-        # EUSED = E1 + E2 + E3
-        #
-        # # RIVA - % de cobertura vegetal nas areas ribeirinhas
-        # # E4 - componente da evapotranspiracao real da cobertura vegetal
-        # E4 = (EP - EUSED)*RIVA
-        # TCI = TCI - E4
+        # TCI - Somatorio dos escoamentos na superficie + Escoamentos de bases
+        quz_mm = ROIMP + SDRO + SSUR + SIF
+        qlz_mm = BFCC
+
+        # EUSED - Somatorio da evapotranspiracao real do UZFW, UZTW e LZTW
+        EUSED = E1 + E2 + E3
+
+        # RIVA - % de cobertura vegetal nas areas ribeirinhas
+        # E4 - componente da evapotranspiracao real da cobertura vegetal
+        E4 = (EP - EUSED)*RIVA
+        # TCI = TCI - E4 (nov/2020)
         # if (TCI < 0):
         #     E4 = E4 + TCI
         #     TCI = 0
-        #
-        # # TET - Evapotranspiracao real total
+        quz_mm = quz_mm - E4
+        if quz_mm < 0:
+            E4 = E4 + quz_mm
+            quz_mm = 0[ ``]
+
+        # TET - Evapotranspiracao real total
         # TET = EUSED*PAREA + E5 + E4
-        Quz.append(ROIMP + SDRO + SSUR + SIF)
-        Qlz.append(BFCC)
-        EUSED.append(E1 + E2 + E3)
-        # ######################### Modificacao - nov/2020 #####################
+
+        QUZ_mm.append(quz_mm)
+        QLZ_mm.append(qlz_mm)
 
         #SROT = SROT + TCI # variavel nao declarada SROT!!!
         if ADIMC < UZTWC : ADIMC = UZTWC
@@ -382,16 +394,60 @@ def sacramento_nash(area, PME, ETP,
     # FIM DO LOOP EXTERNO
     ############################################################################
 
-    # Propagacao - implementacao nov/2020
-    Quz = np.array(Quz)
-    Qlz = np.array(Qlz)
-    EUSED = np.array(EUSED)
-    if Qmon is not None:
-        Qmon = Qmon*(86.4/area) # m3/s -> mm
-        Quz += Qmon
-    E4 = (ETP - EUSED)*RIVA
-    Quz -= E4  # desconta ETP do RIVA
-    Qprop = propagacao.nash_sol_analitica(Quz, k, n)
-    Q = (Qprop + Qlz)*(area/86.4)
+    # Geracao de escoamento superficial - Hidrograma Unitario
+    QUZ = hidrograma_unitario.IUH_3rsv(QUZ_mm, k_HU, C1, C2, dt=1) * (area/86.4)
+    # Propagacao das vazoes de montante
+    Qprop = propagacao.muskingum(Qmon, k_musk, x, qini=Qmon[0], dt=1)
+    # Conversao das vazoes do escoamento de base mm - m3/s
+    QLZ = np.array(QLZ_mm) * (area/86.4)
+
+    Q = QUZ + QLZ + Qprop
 
     return Q
+
+
+class spot_setup(object):
+
+    UZTWM  = Uniform(low=10, high=150)
+    UZFWM  = Uniform(low=10, high=75)
+    LZTWM  = Uniform(low=75, high=400)
+    LZFSM  = Uniform(low=10, high=300)
+    LZFPM  = Uniform(low=50, high=1000)
+    UZK    = Uniform(low=0.2, high=0.4)
+    LZSK   = Uniform(low=0.020, high=0.250)
+    LZPK   = Uniform(low=0.001, high=0.020)
+    PFREE  = Uniform(low=0, high=0.6)
+    ZPERC  = Uniform(low=5, high=250)
+    REXP   = Uniform(low=1.1, high=4)
+    PCTIM  = Uniform(low=0, high=0.1)
+    ADIMP  = Uniform(low=0, high=0.2)
+    k_HU   = Uniform(low=0.5, high=10)
+    C1     = Uniform(low=0.01, high=0.35)
+    C2     = Uniform(low=0.01, high=0.35)
+    k_musk = Uniform(low=0.5, high=10)
+    x      = Uniform(low=0.01, high=0.5)
+
+    def __init__(self, area, PME, ETP, Qjus, Qmon=None, h_aq=0, fobj='KGE'):
+        self.area = area
+        self.PME  = PME
+        self.ETP  = ETP
+        self.Qjus = Qjus
+        self.Qmon = Qmon
+        self.h_aq = h_aq
+        self.fobj = fobj
+
+    def simulation(self, x):
+        Qsim = sacramento(self.area, self.PME, self.ETP,  \
+                            x[0], x[1], x[2], x[3], x[4], \
+                            x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12], \
+                            x[13], x[14], x[15], x[16], x[17], Qmon=self.Qmon)
+        return Qsim
+
+    def evaluation(self):
+        Qobs = self.Qjus
+        return Qobs
+
+    def objectivefunction(self, simulation, evaluation):
+        criterio = getattr(funcoes_objetivo, self.fobj)(simulation, evaluation, self.h_aq)
+        fmin = 1 - criterio
+        return fmin
